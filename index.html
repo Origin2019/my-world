@@ -19,7 +19,7 @@
         <div class="tab-bar">
             <button class="tab-btn active" data-tab="tasks">任务</button>
             <button class="tab-btn" data-tab="notes">便签</button>
-            <button id="cloudBtn" class="cloud-btn" title="云端同步设置" onclick="openCloudModal()">☁ 未登录</button>
+            <button id="cloudBtn" class="cloud-btn" title="云端同步设置" onclick="openCloudModal()">☁ 未连接</button>
         </div>
 
         <div class="tab-content" id="tab-tasks">
@@ -172,21 +172,25 @@
                 <button class="note-modal-close" onclick="closeCloudModal()">&times;</button>
             </div>
             <div class="note-modal-body">
-                <p class="cloud-hint">登录同一个账号，手机和电脑的数据就会自动同步。</p>
+                <p class="cloud-hint">用你的 GitHub 账号做数据中转：手机和电脑填入<b>同一个 Token</b>，数据就会自动同步（国内直连，不用代理）。</p>
                 <div id="cloudLoggedOut">
-                    <input type="email" id="cloudEmail" class="note-title-input" placeholder="邮箱" autocomplete="username">
-                    <input type="password" id="cloudPassword" class="note-title-input" placeholder="密码（至少 6 位）" autocomplete="current-password">
+                    <input type="password" id="cloudToken" class="note-title-input" placeholder="粘贴 GitHub Token（ghp_... 开头）" autocomplete="off" spellcheck="false">
                     <div class="cloud-actions">
-                        <button class="note-modal-save" onclick="cloudSignIn()">登录</button>
-                        <button class="note-modal-cancel" onclick="cloudSignUp()">注册新账号</button>
+                        <button class="note-modal-save" onclick="cloudConnect()">连接</button>
                     </div>
-                    <p class="cloud-note">第一次使用请先「注册新账号」。若注册后收到验证邮件，点开邮件里的链接再回来登录即可。</p>
+                    <p class="cloud-note">
+                        没有 Token？<a href="https://github.com/settings/tokens/new?description=my-world&amp;scopes=gist" target="_blank" rel="noopener">点这里生成</a>
+                        （已自动勾好 <code>gist</code> 权限）→ 拉到底点 <b>Generate token</b> → 复制那串 <code>ghp_...</code> 粘到上面。
+                    </p>
                 </div>
                 <div id="cloudLoggedIn" style="display:none;">
                     <p class="cloud-account">当前账号：<span id="cloudEmailShow"></span></p>
                     <div class="cloud-actions">
                         <button class="note-modal-save" onclick="cloudSyncNow()">立即同步</button>
-                        <button class="note-modal-cancel" onclick="cloudSignOut()">退出登录</button>
+                        <button class="note-modal-cancel" onclick="cloudDisconnect()">断开连接</button>
+                    </div>
+                    <div class="cloud-actions">
+                        <button class="cloud-link-btn" onclick="cloudPhoneLink()">📱 生成手机配置链接</button>
                     </div>
                 </div>
                 <p class="cloud-status" id="cloudStatusLine"></p>
@@ -200,10 +204,7 @@
         </div>
     </div>
 
-    <!-- Supabase 官方 SDK（已内置到本地，不走 CDN，避免手机网络拦截） -->
-    <script src="supabase-js.js"></script>
-    <script src="supabase-config.js"></script>
-    <!-- 数据层 & 云同步：必须先于 app.js 加载 -->
+    <!-- 数据层 & 云同步（GitHub Gist）：必须先于 app.js 加载 -->
     <script src="sync.js"></script>
     <script src="app.js"></script>
     <script>
