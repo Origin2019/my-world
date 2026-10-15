@@ -191,6 +191,7 @@
                 </div>
                 <p class="cloud-status" id="cloudStatusLine"></p>
                 <div class="cloud-backup">
+                    <button onclick="cloudDiagnose()">🔍 测试连接</button>
                     <button onclick="importUserData()">从文件导入数据</button>
                     <button onclick="exportUserData()">导出备份</button>
                 </div>
@@ -199,8 +200,8 @@
         </div>
     </div>
 
-    <!-- Supabase 官方 SDK（走 CDN，无需安装依赖） -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+    <!-- Supabase 官方 SDK（已内置到本地，不走 CDN，避免手机网络拦截） -->
+    <script src="supabase-js.js"></script>
     <script src="supabase-config.js"></script>
     <!-- 数据层 & 云同步：必须先于 app.js 加载 -->
     <script src="sync.js"></script>

@@ -85,8 +85,23 @@
             btn.textContent = BADGE[state] || '☁ 云同步';
         }
         var line = document.getElementById('cloudStatusLine');
-        if (line) line.textContent = msg || '';
+        if (line) {
+            line.textContent = msg || '';
+            line.dataset.state = state;
+        }
         updatePanel();
+    }
+
+    // 给请求加超时：手机网络不通时不会一直“没反应”
+    function withTimeout(promise, ms, label) {
+        return Promise.race([
+            promise,
+            new Promise(function (_resolve, reject) {
+                setTimeout(function () {
+                    reject(new Error((label || '请求') + '超过 ' + Math.round(ms / 1000) + ' 秒无响应'));
+                }, ms);
+            })
+        ]);
     }
 
     function updatePanel() {
@@ -264,29 +279,50 @@
         document.getElementById('cloudModal').style.display = 'none';
     };
     window.cloudSignIn = function () {
-        if (!client) { setStatus('noconfig', '尚未配置 Supabase，请先填写 supabase-config.js'); return; }
+        if (!hasSDK) { setStatus('error', '❌ Supabase 组件没加载成功，请下拉刷新页面'); return; }
+        if (!client) { setStatus('error', '❌ 配置/网络异常，请先点「🔍 测试连接」'); return; }
         var c = creds();
-        if (!c.email || !c.password) { setStatus('error', '请填写邮箱和密码'); return; }
-        setStatus('syncing', '正在登录…');
-        signIn(c.email, c.password).catch(function (err) {
-            setStatus('error', '登录失败：' + err.message);
-        });
+        if (!c.email || !c.password) { setStatus('error', '请先填写邮箱和密码'); return; }
+        setStatus('syncing', '正在登录…（超 15 秒无反应多为网络问题）');
+        withTimeout(signIn(c.email, c.password), 15000, '登录')
+            .then(function () { setStatus('syncing', '登录成功，正在同步数据…'); })
+            .catch(function (err) { setStatus('error', '❌ 登录失败：' + err.message); });
     };
     window.cloudSignUp = function () {
-        if (!client) { setStatus('noconfig', '尚未配置 Supabase，请先填写 supabase-config.js'); return; }
+        if (!hasSDK) { setStatus('error', '❌ Supabase 组件没加载成功，请下拉刷新页面'); return; }
+        if (!client) { setStatus('error', '❌ 配置/网络异常，请先点「🔍 测试连接」'); return; }
         var c = creds();
-        if (!c.email || !c.password) { setStatus('error', '请填写邮箱和密码'); return; }
+        if (!c.email || !c.password) { setStatus('error', '请先填写邮箱和密码'); return; }
         if (c.password.length < 6) { setStatus('error', '密码至少 6 位'); return; }
-        setStatus('syncing', '正在注册…');
-        signUp(c.email, c.password).then(function (data) {
-            if (data && data.session) {
-                setStatus('syncing', '注册成功，正在同步…');
-            } else {
-                setStatus('off', '注册成功！请到邮箱点开验证链接，再回来登录');
-            }
-        }).catch(function (err) {
-            setStatus('error', '注册失败：' + err.message);
-        });
+        setStatus('syncing', '正在注册…（超 15 秒无反应多为网络问题）');
+        withTimeout(signUp(c.email, c.password), 15000, '注册')
+            .then(function (data) {
+                if (data && data.session) {
+                    setStatus('syncing', '注册成功，正在同步数据…');
+                } else {
+                    setStatus('off', '注册成功！请到邮箱点开验证链接，再回来登录');
+                }
+            })
+            .catch(function (err) {
+                setStatus('error', '❌ 注册失败：' + err.message);
+            });
+    };
+
+    // 一键自检：组件 / 配置 / 网络 / 数据库 四项逐一检查
+    window.cloudDiagnose = function () {
+        if (!hasSDK) { setStatus('error', '❌ supabase-js.js 没加载成功（文件缺失或被拦截）'); return; }
+        if (!configured) { setStatus('error', '❌ 配置是空的：请检查 supabase-config.js 是否上传成功'); return; }
+        if (!client) { setStatus('error', '❌ 客户端创建失败，请刷新页面重试'); return; }
+        setStatus('syncing', '正在测试与 Supabase 的连接…');
+        var t0 = Date.now();
+        withTimeout(client.from('userdata').select('user_id').limit(1), 15000, '连接测试')
+            .then(function (r) {
+                if (r.error) { setStatus('error', '❌ 连接异常：' + r.error.message); return; }
+                setStatus('on', '✅ 全部正常！组件 ✓ 配置 ✓ 网络 ✓ 数据库 ✓（用时 ' + (Date.now() - t0) + ' ms）');
+            })
+            .catch(function (e) {
+                setStatus('error', '❌ ' + e.message + ' —— 说明手机访问 Supabase 被网络限制，请换 WiFi / 用流量 / 开代理后重试');
+            });
     };
     window.cloudSignOut = function () { signOut(); };
     window.cloudSyncNow = function () {

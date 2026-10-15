@@ -1527,11 +1527,14 @@ header h1 {
 .cloud-actions button { flex: 1; }
 .cloud-note { font-size: 0.72rem; color: #999; margin-top: 12px; line-height: 1.6; }
 .cloud-account { font-size: 0.85rem; color: #333; margin-bottom: 12px; word-break: break-all; }
-.cloud-status { font-size: 0.78rem; color: #8B8682; margin-top: 12px; min-height: 1.2em; word-break: break-all; }
+.cloud-status { font-size: 0.78rem; color: #8B8682; margin-top: 12px; min-height: 1.2em; word-break: break-all; line-height: 1.6; }
+.cloud-status[data-state="error"] { color: #e53e3e; font-weight: 600; }
+.cloud-status[data-state="on"]    { color: #2f855a; font-weight: 600; }
+.cloud-status[data-state="syncing"] { color: #b88230; }
 
-.cloud-backup { display: flex; gap: 10px; margin-top: 14px; }
+.cloud-backup { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
 .cloud-backup button {
-    flex: 1;
+    flex: 1 1 40%;
     padding: 7px 10px;
     font-size: 0.76rem;
     border: 1px solid #ddd;

@@ -1,12 +1,13 @@
 /* Service Worker：让网页可“安装”到主屏幕，并在断网时仍能打开界面。
  * 策略：同源资源「网络优先，失败回退缓存」，保证每次都能拿到最新代码。 */
-var CACHE = 'myworld-v1';
+var CACHE = 'myworld-v2';
 var ASSETS = [
     './',
     './index.html',
     './style.css',
     './app.js',
     './sync.js',
+    './supabase-js.js',
     './supabase-config.js',
     './manifest.webmanifest',
     './icon-192.png',
