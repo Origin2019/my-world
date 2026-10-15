@@ -1540,6 +1540,10 @@ header h1 {
     transition: all 0.2s;
 }
 .cloud-link-btn:hover { background: #f5f5f5; color: #333; }
+.cloud-backup .cloud-warn-btn { border-color: #e6a23c; color: #b88230; background: #fdf6ec; }
+.cloud-backup .cloud-warn-btn:hover { background: #fbeed8; color: #a06f1e; }
+.cloud-choice-title { font-size: 0.86rem; font-weight: 700; color: #b88230; margin-bottom: 6px; }
+.cloud-choice-info { font-size: 0.76rem; color: #666; margin-bottom: 12px; line-height: 1.6; word-break: break-all; }
 .cloud-account { font-size: 0.85rem; color: #333; margin-bottom: 12px; word-break: break-all; }
 .cloud-status { font-size: 0.78rem; color: #8B8682; margin-top: 12px; min-height: 1.2em; word-break: break-all; line-height: 1.6; }
 .cloud-status[data-state="error"] { color: #e53e3e; font-weight: 600; }

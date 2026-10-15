@@ -193,11 +193,22 @@
                         <button class="cloud-link-btn" onclick="cloudPhoneLink()">📱 生成手机配置链接</button>
                     </div>
                 </div>
+                <div id="cloudChoice" style="display:none;">
+                    <p class="cloud-choice-title">⚠️ 云端已有数据，请选择保留哪一份</p>
+                    <p class="cloud-choice-info" id="cloudChoiceInfo"></p>
+                    <div class="cloud-actions">
+                        <button class="note-modal-save" onclick="cloudChoose('cloud')">⬇ 用云端数据</button>
+                        <button class="note-modal-cancel" onclick="cloudChoose('local')">⬆ 用本机数据</button>
+                    </div>
+                    <p class="cloud-note">这一步**不会**自动进行，就是为了防止你的数据被误覆盖。选错也能用下面的「↩ 恢复本机备份」找回。</p>
+                </div>
                 <p class="cloud-status" id="cloudStatusLine"></p>
                 <div class="cloud-backup">
+                    <button onclick="importUserData()">📂 从文件导入数据</button>
+                    <button onclick="exportUserData()">💾 导出备份</button>
                     <button onclick="cloudDiagnose()">🔍 测试连接</button>
-                    <button onclick="importUserData()">从文件导入数据</button>
-                    <button onclick="exportUserData()">导出备份</button>
+                    <button class="cloud-warn-btn" onclick="cloudForceUpload()">⬆ 上传本机到云端</button>
+                    <button class="cloud-warn-btn" onclick="cloudRestoreBackup()">↩ 恢复本机备份</button>
                 </div>
                 <input type="file" id="importFile" accept=".json,application/json" style="display:none" onchange="handleImportFile(event)">
             </div>
