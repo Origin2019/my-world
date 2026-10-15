@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#7CB342">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="我的世界">
+    <title>我的世界</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" href="icon-192.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="tab-bar">
+            <button class="tab-btn active" data-tab="tasks">任务</button>
+            <button class="tab-btn" data-tab="notes">便签</button>
+            <button id="cloudBtn" class="cloud-btn" title="云端同步设置" onclick="openCloudModal()">☁ 未登录</button>
+        </div>
+
+        <div class="tab-content" id="tab-tasks">
+        <div class="main-layout">
+            <div class="left-panel">
+                <header>
+                    <h1>我的世界</h1>
+                </header>
+                <div class="left-content">
+                    <div class="top-sections">
+                        <div class="todo-section">
+                            <h2>待办事项</h2>
+                            <div class="todo-form">
+                                <input type="text" id="todoInput" placeholder="输入待办...">
+                                <label class="todo-progress-toggle">
+                                    <input type="checkbox" id="todoHasProgress">
+                                    <span>进度条</span>
+                                </label>
+                                <div class="subtask-count-wrapper" id="subtaskCountWrapper" style="display:none;">
+                                    <input type="number" id="todoSubtaskCount" min="1" max="100" value="3" class="subtask-count-input">
+                                    <span>个子任务</span>
+                                </div>
+                                <button id="addButton">添加</button>
+                            </div>
+                            <ul id="todoItems"></ul>
+                        </div>
+
+                        <div class="ddl-section">
+                            <h2>DDL 倒计时</h2>
+                            <div class="ddl-form">
+                                <input type="text" id="ddlTitle" placeholder="DDL标题...">
+                                <div class="ddl-row">
+                                    <input type="date" id="ddlDate">
+                                    <select id="ddlHour">
+                                        <option value="">不限时</option>
+                                        <option value="00:00">00:00</option>
+                                        <option value="01:00">01:00</option>
+                                        <option value="02:00">02:00</option>
+                                        <option value="03:00">03:00</option>
+                                        <option value="04:00">04:00</option>
+                                        <option value="05:00">05:00</option>
+                                        <option value="06:00">06:00</option>
+                                        <option value="07:00">07:00</option>
+                                        <option value="08:00">08:00</option>
+                                        <option value="09:00">09:00</option>
+                                        <option value="10:00">10:00</option>
+                                        <option value="11:00">11:00</option>
+                                        <option value="12:00">12:00</option>
+                                        <option value="13:00">13:00</option>
+                                        <option value="14:00">14:00</option>
+                                        <option value="15:00">15:00</option>
+                                        <option value="16:00">16:00</option>
+                                        <option value="17:00">17:00</option>
+                                        <option value="18:00">18:00</option>
+                                        <option value="19:00">19:00</option>
+                                        <option value="20:00">20:00</option>
+                                        <option value="21:00">21:00</option>
+                                        <option value="22:00">22:00</option>
+                                        <option value="23:00">23:00</option>
+                                    </select>
+                                    <button id="addDdlButton">添加</button>
+                                </div>
+                            </div>
+                            <ul id="ddlItems"></ul>
+                        </div>
+                    </div>
+
+                    <div class="resource-section">
+                        <h2>资料库 <button class="resource-add-btn" onclick="openAddResourceModal()">+</button></h2>
+                        <div id="resourceCards" class="resource-cards"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="right-panel">
+                <div class="schedule-header">
+                    <h2>课程表</h2>
+                    <div class="schedule-controls">
+                        <div class="week-selector">
+                            <select id="weekSelect"></select>
+                        </div>
+                        <button class="add-course-btn" onclick="openAddCourseModal()">+课程</button>
+                        <button class="add-schedule-btn" onclick="openAddScheduleModal()">+日程</button>
+                    </div>
+                </div>
+                <div class="schedule-grid-wrapper">
+                    <table class="schedule-grid" id="scheduleGrid">
+                        <colgroup>
+                            <col class="col-time">
+                            <col class="col-day">
+                            <col class="col-day">
+                            <col class="col-day">
+                            <col class="col-day">
+                            <col class="col-day">
+                            <col class="col-day">
+                            <col class="col-day">
+                        </colgroup>
+                        <thead>
+                            <tr>
+                                <th></th>
+                                <th data-day="0" title="悬浮查看该日期的日程"><span class="day-name">周一</span><span class="day-date"></span></th>
+                                <th data-day="1" title="悬浮查看该日期的日程"><span class="day-name">周二</span><span class="day-date"></span></th>
+                                <th data-day="2" title="悬浮查看该日期的日程"><span class="day-name">周三</span><span class="day-date"></span></th>
+                                <th data-day="3" title="悬浮查看该日期的日程"><span class="day-name">周四</span><span class="day-date"></span></th>
+                                <th data-day="4" title="悬浮查看该日期的日程"><span class="day-name">周五</span><span class="day-date"></span></th>
+                                <th data-day="5" title="悬浮查看该日期的日程"><span class="day-name">周六</span><span class="day-date"></span></th>
+                                <th data-day="6" title="悬浮查看该日期的日程"><span class="day-name">周日</span><span class="day-date"></span></th>
+                            </tr>
+                        </thead>
+                        <tbody id="scheduleBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        </div>
+
+        <div class="tab-content" id="tab-notes" style="display:none;">
+            <div class="notes-layout">
+                <header>
+                    <h1>便签</h1>
+                </header>
+                <div class="notes-toolbar">
+                    <button class="note-add-btn" onclick="openNoteModal()">+ 新建便签</button>
+                </div>
+                <div class="notes-grid" id="notesGrid"></div>
+            </div>
+        </div>
+    </div>
+    <div class="note-modal-overlay" id="noteModal" style="display:none;" onclick="closeNoteModal(event)">
+        <div class="note-modal">
+            <div class="note-modal-header">
+                <h3 id="noteModalTitle">新建便签</h3>
+                <span id="autoSaveIndicator" style="font-size:0.75rem;color:#999;margin-right:auto;margin-left:12px;"></span>
+                <button class="note-modal-close" onclick="closeNoteModal()">&times;</button>
+            </div>
+            <div class="note-modal-body">
+                <input type="text" id="noteTitleInput" placeholder="标题..." class="note-title-input">
+                <textarea id="noteContentInput" placeholder="输入内容..." class="note-content-input"></textarea>
+            </div>
+            <div class="note-modal-footer">
+                <button class="note-modal-cancel" onclick="closeNoteModal()">取消</button>
+                <button class="note-modal-save" onclick="saveNote()">保存</button>
+            </div>
+        </div>
+    </div>
+    <div class="note-modal-overlay" id="cloudModal" style="display:none;" onclick="closeCloudModal(event)">
+        <div class="note-modal cloud-modal">
+            <div class="note-modal-header">
+                <h3>云同步</h3>
+                <button class="note-modal-close" onclick="closeCloudModal()">&times;</button>
+            </div>
+            <div class="note-modal-body">
+                <p class="cloud-hint">登录同一个账号，手机和电脑的数据就会自动同步。</p>
+                <div id="cloudLoggedOut">
+                    <input type="email" id="cloudEmail" class="note-title-input" placeholder="邮箱" autocomplete="username">
+                    <input type="password" id="cloudPassword" class="note-title-input" placeholder="密码（至少 6 位）" autocomplete="current-password">
+                    <div class="cloud-actions">
+                        <button class="note-modal-save" onclick="cloudSignIn()">登录</button>
+                        <button class="note-modal-cancel" onclick="cloudSignUp()">注册新账号</button>
+                    </div>
+                    <p class="cloud-note">第一次使用请先「注册新账号」。若注册后收到验证邮件，点开邮件里的链接再回来登录即可。</p>
+                </div>
+                <div id="cloudLoggedIn" style="display:none;">
+                    <p class="cloud-account">当前账号：<span id="cloudEmailShow"></span></p>
+                    <div class="cloud-actions">
+                        <button class="note-modal-save" onclick="cloudSyncNow()">立即同步</button>
+                        <button class="note-modal-cancel" onclick="cloudSignOut()">退出登录</button>
+                    </div>
+                </div>
+                <p class="cloud-status" id="cloudStatusLine"></p>
+                <div class="cloud-backup">
+                    <button onclick="importUserData()">从文件导入数据</button>
+                    <button onclick="exportUserData()">导出备份</button>
+                </div>
+                <input type="file" id="importFile" accept=".json,application/json" style="display:none" onchange="handleImportFile(event)">
+            </div>
+        </div>
+    </div>
+
+    <!-- Supabase 官方 SDK（走 CDN，无需安装依赖） -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+    <script src="supabase-config.js"></script>
+    <!-- 数据层 & 云同步：必须先于 app.js 加载 -->
+    <script src="sync.js"></script>
+    <script src="app.js"></script>
+    <script>
+        // 注册 Service Worker，让网页可以“安装”到手机主屏幕，像 App 一样点击打开
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function () {
+                navigator.serviceWorker.register('sw.js').catch(function (e) {
+                    console.warn('Service Worker 注册失败：', e);
+                });
+            });
+        }
+    </script>
+</body>
+</html>
