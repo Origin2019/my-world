@@ -683,7 +683,7 @@ function onScheduleRightClick(e, scheduleId) {
 function renderTodos() {
     var todoList = document.getElementById('todoItems');
     var visible = todos.filter(function(t) { return !t.hidden; });
-    if (visible.length === 0) { todoList.innerHTML = '<div class="empty-message">暂无待办事项</div>'; return; }
+    if (visible.length === 0) { todoList.innerHTML = '<div class="empty-message">暂无待办事项</div>'; renderFloating(); return; }
     var html = '';
     for (var i = 0; i < todos.length; i++) {
         if (todos[i].hidden) continue;
@@ -941,8 +941,35 @@ function applyFloatingPos(panel) {
     }
 }
 
-function renderFloating() {
+function ensureFloatingPanel() {
+    // 兜底：浏览器缓存了旧版 index.html（页面里没有面板节点）时，动态把面板建出来，
+    // 避免出现「点了 📌 却毫无反应」（待办其实已固定，只是没有可见的面板）。
     var panel = document.getElementById('floatingPanel');
+    if (panel && document.getElementById('floatingBody') && document.getElementById('floatingHeader')) return panel;
+    if (panel) panel.remove();
+
+    panel = document.createElement('div');
+    panel.id = 'floatingPanel';
+    panel.className = 'floating-panel';
+    // 关键样式写在行内：即使 style.css 也是旧版，浮层也能正常显示在最上层
+    panel.style.cssText = 'position:fixed;right:14px;top:86px;width:260px;max-width:88vw;' +
+        'max-height:70vh;overflow:hidden;display:none;flex-direction:column;background:#fff;' +
+        'border:1px solid #D4C4B0;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.18);' +
+        'z-index:99999;font-size:0.8rem;';
+    panel.innerHTML =
+        '<div class="floating-header" id="floatingHeader" style="display:flex;align-items:center;' +
+            'gap:6px;padding:6px 8px;background:#7CB342;color:#fff;font-weight:bold;">' +
+            '<span class="floating-header-title" style="flex:1;">📌 悬浮待办</span>' +
+            '<button class="floating-min-btn" onclick="toggleFloatingMin()" title="收起 / 展开">－</button>' +
+            '<button class="floating-close-btn" onclick="closeFloatingPanel()" title="关闭（取消全部固定）">&times;</button>' +
+        '</div>' +
+        '<div class="floating-body" id="floatingBody" style="overflow-y:auto;padding:6px 8px;"></div>';
+    document.body.appendChild(panel);
+    return panel;
+}
+
+function renderFloating() {
+    var panel = ensureFloatingPanel();
     var body = document.getElementById('floatingBody');
     if (!panel || !body) return;
 
@@ -992,7 +1019,7 @@ function renderFloating() {
 }
 
 function initFloatingDrag() {
-    var panel = document.getElementById('floatingPanel');
+    var panel = ensureFloatingPanel();
     var header = document.getElementById('floatingHeader');
     if (!panel || !header) return;
     var dragging = false, sx = 0, sy = 0, sl = 0, st = 0;
