@@ -1616,6 +1616,7 @@ header h1 {
 }
 
 .floating-min-btn,
+.floating-pip-btn,
 .floating-close-btn {
     border: none;
     background: rgba(255, 255, 255, 0.22);
@@ -1633,6 +1634,7 @@ header h1 {
 }
 
 .floating-min-btn:hover,
+.floating-pip-btn:hover,
 .floating-close-btn:hover { background: rgba(255, 255, 255, 0.4); }
 
 .floating-body {

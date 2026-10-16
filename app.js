@@ -960,6 +960,8 @@ function ensureFloatingPanel() {
         '<div class="floating-header" id="floatingHeader" style="display:flex;align-items:center;' +
             'gap:6px;padding:6px 8px;background:#7CB342;color:#fff;font-weight:bold;">' +
             '<span class="floating-header-title" style="flex:1;">📌 悬浮待办</span>' +
+            '<button class="floating-pip-btn" id="floatingPipBtn" onclick="toggleFloatingPip()" ' +
+                'title="独立置顶小窗：可浮在记事本等任意窗口之上" style="display:none;">🪟</button>' +
             '<button class="floating-min-btn" onclick="toggleFloatingMin()" title="收起 / 展开">－</button>' +
             '<button class="floating-close-btn" onclick="closeFloatingPanel()" title="关闭（取消全部固定）">&times;</button>' +
         '</div>' +
@@ -972,6 +974,7 @@ function renderFloating() {
     var panel = ensureFloatingPanel();
     var body = document.getElementById('floatingBody');
     if (!panel || !body) return;
+    syncPipButton();
 
     var keys = getFloatingKeys();
     var alive = [];
@@ -984,7 +987,7 @@ function renderFloating() {
     if (alive.length !== keys.length) setFloatingKeys(alive);    // 顺手清掉失效的
     keys = alive;
 
-    if (keys.length === 0) { panel.style.display = 'none'; return; }
+    if (keys.length === 0) { panel.style.display = 'none'; pipRender(); return; }
 
     var html = '';
     for (var k = 0; k < keys.length; k++) {
@@ -1016,6 +1019,7 @@ function renderFloating() {
     panel.style.display = '';
     panel.classList.toggle('floating-min', localStorage.getItem(FLOAT_MIN_KEY) === '1');
     applyFloatingPos(panel);
+    pipRender();          // 独立置顶小窗跟着一起更新
 }
 
 function initFloatingDrag() {
@@ -1062,6 +1066,98 @@ function initFloatingDrag() {
     }, { passive: true });
     document.addEventListener('touchend', end);
     window.addEventListener('resize', function () { renderFloating(); });
+}
+
+/* ================= 独立置顶小窗（文档画中画，电脑版 Chrome / Edge 116+） =================
+ * 网页内的浮层只能盖住“本网页”，永远盖不住记事本这类别的程序。
+ * 系统的“画中画”窗口是真正的独立置顶窗口，所以待办可以浮在任何程序之上，且无需安装任何软件。 */
+var pipWindow = null;
+
+function pipSupported() { return 'documentPictureInPicture' in window; }
+
+function syncPipButton() {
+    var b = document.getElementById('floatingPipBtn');
+    if (b) b.style.display = pipSupported() ? '' : 'none';
+}
+
+function toggleFloatingPip() {
+    if (!pipSupported()) {
+        alert('这个浏览器不支持「独立置顶小窗」。\n\n' +
+            '· 电脑：请用 Chrome 或 Edge（116 以上版本）打开本网页；\n' +
+            '· 手机：系统限制，网页无法浮在别的 App 上面。');
+        return;
+    }
+    if (pipWindow && !pipWindow.closed) { try { pipWindow.close(); } catch (e) { } pipWindow = null; return; }
+
+    documentPictureInPicture.requestWindow({ width: 300, height: 340 }).then(function (w) {
+        pipWindow = w;
+        var doc = w.document;
+        doc.title = '悬浮待办';
+        // 把主页面的样式搬过来，保证外观一致
+        var src = document.querySelectorAll('link[rel="stylesheet"], style');
+        for (var i = 0; i < src.length; i++) doc.head.appendChild(src[i].cloneNode(true));
+        var extra = doc.createElement('style');
+        extra.textContent =
+            'html,body{margin:0;padding:0;height:100%;background:#f7f6f2;color:#2d3748;' +
+            'font-family:system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;font-size:13px;}' +
+            '#pipWrap{display:flex;flex-direction:column;height:100%;}' +
+            '#pipHead{display:flex;align-items:center;gap:6px;padding:6px 8px;flex-shrink:0;' +
+            'background:linear-gradient(135deg,#7CB342,#9CCC65);color:#fff;font-weight:bold;font-size:12px;}' +
+            '#pipBody{flex:1;overflow-y:auto;padding:8px 10px;}' +
+            '#pipBody .todo-progress-wrap{margin-left:0;}' +
+            '#pipBody .todo-progress-bar{flex:1;width:auto;}' +
+            '.pip-empty{color:#a0aec0;text-align:center;padding:26px 6px;font-size:12px;line-height:1.8;}';
+        doc.head.appendChild(extra);
+        var wrap = doc.createElement('div');
+        wrap.id = 'pipWrap';
+        wrap.innerHTML = '<div id="pipHead"><span style="flex:1">📌 悬浮待办 · 始终置顶</span>' +
+            '<span style="font-weight:normal;font-size:11px;opacity:.9;">点格子即打勾</span></div>' +
+            '<div id="pipBody"></div>';
+        doc.body.appendChild(wrap);
+        pipRender();
+        w.addEventListener('pagehide', function () { pipWindow = null; });
+    }).catch(function (e) {
+        alert('打开置顶小窗失败：' + (e && e.message ? e.message : e));
+    });
+}
+
+function onPipSubToggle() {
+    floatToggleSub(parseInt(this.getAttribute('data-k'), 10), parseInt(this.getAttribute('data-j'), 10));
+}
+
+function pipRender() {
+    if (!pipWindow || pipWindow.closed) return;
+    var doc = pipWindow.document;
+    var body = doc.getElementById('pipBody');
+    if (!body) return;
+
+    var keys = getFloatingKeys();
+    var html = '';
+    for (var k = 0; k < keys.length; k++) {
+        var ti = findTodoByKey(keys[k]);
+        if (ti < 0) continue;
+        var t = todos[ti];
+        if (!t.hasProgress || !t.subTasks) continue;
+        var done = getCompletedCount(t.subTasks);
+        var total = t.subTasks.length;
+        var pct = total > 0 ? Math.round(done / total * 100) : 0;
+        html += '<div class="floating-todo' + (t.completed ? ' done' : '') + '">';
+        html += '<div class="floating-todo-head"><span class="floating-todo-text">' + t.text + '</span></div>';
+        html += '<div class="todo-progress-wrap">';
+        html += '<span class="todo-progress-text">' + done + '/' + total + '</span>';
+        html += '<div class="todo-progress-bar"><div class="todo-progress-fill" style="width:' + pct + '%"></div></div>';
+        html += '<span class="todo-progress-pct">' + pct + '%</span>';
+        html += '</div><div class="floating-subgrid">';
+        for (var j = 0; j < total; j++) {
+            html += '<label class="floating-sub"><input type="checkbox"' + (t.subTasks[j] ? ' checked' : '') +
+                ' data-k="' + k + '" data-j="' + j + '"><span>' + (j + 1) + '</span></label>';
+        }
+        html += '</div></div>';
+    }
+    body.innerHTML = html || '<div class="pip-empty">还没有固定的待办<br>回到网页，点某个待办进度条右侧的 📌 即可</div>';
+
+    var boxes = body.querySelectorAll('input[type="checkbox"]');
+    for (var b = 0; b < boxes.length; b++) boxes[b].addEventListener('change', onPipSubToggle);
 }
 
 function onTodoRightClick(e, index) {
