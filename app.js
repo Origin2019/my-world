@@ -701,9 +701,7 @@ function renderTodos() {
             html += '<div class="todo-progress-bar"><div class="todo-progress-fill" style="width:' + pct + '%"></div></div>';
             html += '<span class="todo-progress-pct">' + pct + '%</span>';
             html += '<button class="todo-expand-btn' + (todos[i].expanded ? ' open' : '') + '" onclick="toggleExpand(' + i + ')">&#9662;</button>';
-            if (window.electronAPI) { // 悬浮窗是桌面版专属，网页版不显示该按钮
-                html += '<button class="todo-float-btn" onclick="openFloating(' + i + ')" title="添加到悬浮窗">&#128204;</button>';
-            }
+            html += '<button class="todo-float-btn" onclick="openFloating(' + i + ')" title="固定为悬浮窗，始终显示在最上层">&#128204;</button>';
             html += '</div>';
         }
         html += '</li>';
@@ -727,6 +725,7 @@ function renderTodos() {
         }
     }
     todoList.innerHTML = html;
+    renderFloating();   // 悬浮窗跟着一起更新
 }
 
 function addTodo() {
@@ -862,17 +861,180 @@ function toggleExpand(index) {
 }
 
 function openFloating(index) {
-    if (!window.electronAPI) {
-        alert('悬浮窗功能需要在 Electron 中运行');
+    var t = todos[index];
+    if (!t) return;
+    if (!t.hasProgress || !t.subTasks) {
+        alert('只有带进度条的待办才能固定到悬浮窗（右键 → 添加进度条）');
         return;
     }
-    var todo = todos[index];
-    window.electronAPI.addToFloating({
-        index: index,
-        text: todo.text,
-        subTasks: todo.subTasks.slice(),
-        completed: todo.completed
+    var key = todoKeyOf(t);
+    var keys = getFloatingKeys();
+    if (keys.indexOf(key) < 0) { keys.push(key); setFloatingKeys(keys); }
+    localStorage.removeItem(FLOAT_MIN_KEY);   // 固定时自动展开
+    renderFloating();
+}
+
+/* ================= 悬浮待办（网页版：固定在页面最上层的浮层） ================= */
+var FLOAT_KEY = '__floating_todos';
+var FLOAT_POS_KEY = '__floating_pos';
+var FLOAT_MIN_KEY = '__floating_min';
+
+function getFloatingKeys() {
+    try {
+        var v = JSON.parse(localStorage.getItem(FLOAT_KEY));
+        return Array.isArray(v) ? v : [];
+    } catch (e) { return []; }
+}
+function setFloatingKeys(keys) {
+    localStorage.setItem(FLOAT_KEY, JSON.stringify(keys));
+}
+function todoKeyOf(t) {
+    return String(t.createdAt || t.text || '');
+}
+function findTodoByKey(key) {
+    for (var i = 0; i < todos.length; i++) {
+        if (todoKeyOf(todos[i]) === key) return i;
+    }
+    return -1;
+}
+
+function unpinFloatingAt(i) {
+    var keys = getFloatingKeys();
+    keys.splice(i, 1);
+    setFloatingKeys(keys);
+    renderFloating();
+}
+
+function closeFloatingPanel() {
+    setFloatingKeys([]);
+    renderFloating();
+}
+
+function toggleFloatingMin() {
+    var panel = document.getElementById('floatingPanel');
+    if (!panel) return;
+    var min = panel.classList.toggle('floating-min');
+    if (min) localStorage.setItem(FLOAT_MIN_KEY, '1');
+    else localStorage.removeItem(FLOAT_MIN_KEY);
+}
+
+function floatToggleSub(keyIdx, subIdx) {
+    var keys = getFloatingKeys();
+    var ti = findTodoByKey(keys[keyIdx]);
+    if (ti < 0) return;
+    toggleSubTask(ti, subIdx);
+}
+
+function clampNum(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+function applyFloatingPos(panel) {
+    var pos = null;
+    try { pos = JSON.parse(localStorage.getItem(FLOAT_POS_KEY)); } catch (e) { }
+    if (pos && typeof pos.left === 'number' && typeof pos.top === 'number') {
+        panel.style.left = clampNum(pos.left, 0, Math.max(0, window.innerWidth - 80)) + 'px';
+        panel.style.top = clampNum(pos.top, 0, Math.max(0, window.innerHeight - 60)) + 'px';
+        panel.style.right = 'auto';
+    } else {
+        panel.style.left = 'auto';
+        panel.style.right = '14px';
+        panel.style.top = '86px';
+    }
+}
+
+function renderFloating() {
+    var panel = document.getElementById('floatingPanel');
+    var body = document.getElementById('floatingBody');
+    if (!panel || !body) return;
+
+    var keys = getFloatingKeys();
+    var alive = [];
+    for (var i = 0; i < keys.length; i++) {
+        var ti = findTodoByKey(keys[i]);
+        if (ti < 0) continue;                                   // 待办已被删除
+        if (!todos[ti].hasProgress || !todos[ti].subTasks) continue;
+        alive.push(keys[i]);
+    }
+    if (alive.length !== keys.length) setFloatingKeys(alive);    // 顺手清掉失效的
+    keys = alive;
+
+    if (keys.length === 0) { panel.style.display = 'none'; return; }
+
+    var html = '';
+    for (var k = 0; k < keys.length; k++) {
+        var idx = findTodoByKey(keys[k]);
+        var t = todos[idx];
+        var done = getCompletedCount(t.subTasks);
+        var total = t.subTasks.length;
+        var pct = total > 0 ? Math.round(done / total * 100) : 0;
+        html += '<div class="floating-todo' + (t.completed ? ' done' : '') + '">';
+        html += '<div class="floating-todo-head">';
+        html += '<span class="floating-todo-text">' + t.text + '</span>';
+        html += '<button class="floating-todo-unpin" onclick="unpinFloatingAt(' + k + ')" title="取消固定">&times;</button>';
+        html += '</div>';
+        html += '<div class="todo-progress-wrap">';
+        html += '<span class="todo-progress-text">' + done + '/' + total + '</span>';
+        html += '<div class="todo-progress-bar"><div class="todo-progress-fill" style="width:' + pct + '%"></div></div>';
+        html += '<span class="todo-progress-pct">' + pct + '%</span>';
+        html += '</div>';
+        html += '<div class="floating-subgrid">';
+        for (var j = 0; j < t.subTasks.length; j++) {
+            html += '<label class="floating-sub">';
+            html += '<input type="checkbox"' + (t.subTasks[j] ? ' checked' : '') + ' onchange="floatToggleSub(' + k + ',' + j + ')">';
+            html += '<span>' + (j + 1) + '</span>';
+            html += '</label>';
+        }
+        html += '</div></div>';
+    }
+    body.innerHTML = html;
+    panel.style.display = '';
+    panel.classList.toggle('floating-min', localStorage.getItem(FLOAT_MIN_KEY) === '1');
+    applyFloatingPos(panel);
+}
+
+function initFloatingDrag() {
+    var panel = document.getElementById('floatingPanel');
+    var header = document.getElementById('floatingHeader');
+    if (!panel || !header) return;
+    var dragging = false, sx = 0, sy = 0, sl = 0, st = 0;
+
+    function start(x, y) {
+        var r = panel.getBoundingClientRect();
+        dragging = true; sx = x; sy = y; sl = r.left; st = r.top;
+        panel.style.right = 'auto';
+        panel.style.left = r.left + 'px';
+        panel.style.top = r.top + 'px';
+    }
+    function move(x, y) {
+        if (!dragging) return;
+        var nl = clampNum(sl + x - sx, 0, Math.max(0, window.innerWidth - 80));
+        var nt = clampNum(st + y - sy, 0, Math.max(0, window.innerHeight - 50));
+        panel.style.left = nl + 'px';
+        panel.style.top = nt + 'px';
+    }
+    function end() {
+        if (!dragging) return;
+        dragging = false;
+        var r = panel.getBoundingClientRect();
+        localStorage.setItem(FLOAT_POS_KEY, JSON.stringify({ left: Math.round(r.left), top: Math.round(r.top) }));
+    }
+
+    header.addEventListener('mousedown', function (e) {
+        if (e.target.tagName === 'BUTTON') return;
+        e.preventDefault();
+        start(e.clientX, e.clientY);
     });
+    document.addEventListener('mousemove', function (e) { move(e.clientX, e.clientY); });
+    document.addEventListener('mouseup', end);
+    header.addEventListener('touchstart', function (e) {
+        if (e.target.tagName === 'BUTTON') return;
+        var t = e.touches[0]; start(t.clientX, t.clientY);
+    }, { passive: true });
+    document.addEventListener('touchmove', function (e) {
+        if (!dragging) return;
+        var t = e.touches[0]; move(t.clientX, t.clientY);
+    }, { passive: true });
+    document.addEventListener('touchend', end);
+    window.addEventListener('resize', function () { renderFloating(); });
 }
 
 function onTodoRightClick(e, index) {
@@ -1259,7 +1421,7 @@ function renderDDLs() {
                 else countdownText = remainDays + '天';
             }
         }
-        html += '<li class="ddl-item" oncontextmenu="onDdlRightClick(event,' + i + ')">' +
+        html += '<li class="ddl-item' + (ddl.autoType === 'groupMeeting' ? ' ddl-group-meeting' : '') + '" oncontextmenu="onDdlRightClick(event,' + i + ')">' +
             '<label class="todo-check"><input type="checkbox" onchange="deleteDdl(' + i + ')"><span class="checkmark"></span></label>' +
             '<div class="ddl-info"><div class="ddl-title">' + ddl.title + '</div>' +
             '<div class="ddl-countdown ' + (isOverdue ? 'overdue' : '') + '">' + countdownText + '</div>' +
@@ -1502,9 +1664,14 @@ document.addEventListener('DOMContentLoaded', function() {
     function autoSaveNote() {
         var title = document.getElementById('noteTitleInput').value.trim();
         var content = document.getElementById('noteContentInput').value.trim();
-        
+
         if (!title && !content && currentAttachments.length === 0) return;
-        
+
+        // 防止"保存后又自动保存一次"，导致同一条便签存成两条
+        var modal = document.getElementById('noteModal');
+        var modalOpen = modal && modal.style.display !== 'none';
+        if (!editingNoteId && !modalOpen) return;
+
         if (editingNoteId) {
             var note = notes.find(function(n) { return n.id === editingNoteId; });
             if (note) {
@@ -1681,24 +1848,34 @@ document.addEventListener('DOMContentLoaded', function() {
     };
 
     window.saveNote = function() {
+        // 关键：先取消还没触发的"自动保存"，否则它会用同样的内容再新建一条（重复便签的元凶）
+        if (noteAutoSaveTimer) { clearTimeout(noteAutoSaveTimer); noteAutoSaveTimer = null; }
         var title = document.getElementById('noteTitleInput').value.trim();
         var content = document.getElementById('noteContentInput').value.trim();
-        if (!title && !content && currentAttachments.length === 0) return;
+        if (!title && !content && currentAttachments.length === 0) { 
+            document.getElementById('noteModal').style.display = 'none';
+            editingNoteId = null;
+            currentAttachments = [];
+            return; 
+        }
         if (editingNoteId) {
             var note = notes.find(function(n) { return n.id === editingNoteId; });
             if (note) {
                 note.title = title;
                 note.content = content;
                 note.attachments = currentAttachments.slice();
+                note.updatedAt = Date.now();
             }
         } else {
+            var newId = generateNoteId();
             notes.unshift({
-                id: generateNoteId(),
+                id: newId,
                 title: title,
                 content: content,
                 attachments: currentAttachments.slice(),
                 createdAt: Date.now()
             });
+            editingNoteId = newId;
         }
         saveNotes();
         renderNotes();
@@ -1724,4 +1901,110 @@ document.addEventListener('DOMContentLoaded', function() {
     };
 
     renderNotes();
+    renderFloating();
+    initFloatingDrag();
+    renderLyrics();
 });
+
+/* ================= 每日韩语歌词 ================= */
+var LYRICS_OFFSET_KEY = '__lyrics_offset';   // 设备本地：手动翻看用的偏移，不参与云同步
+var lyricsShowVocab = false;
+
+function lyricsEsc(s) {
+    return String(s === undefined || s === null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function lyricsDayIndex(total) {
+    var L = window.KOREAN_LYRICS || {};
+    var now = new Date();
+    var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    var base = today;
+    if (L.startDate) {
+        var p = String(L.startDate).split('-');
+        if (p.length === 3) base = new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10));
+    }
+    var days = Math.floor((today - base) / 86400000);
+    if (!isFinite(days) || days < 0) days = 0;
+    var off = parseInt(localStorage.getItem(LYRICS_OFFSET_KEY) || '0', 10);
+    if (!isFinite(off)) off = 0;
+    return ((days + off) % total + total) % total;
+}
+
+function lyricsMarkVocab(line) {
+    var text = lyricsEsc(line.ko);
+    if (!lyricsShowVocab || !line.vocab || !line.vocab.length) return text;
+    for (var i = 0; i < line.vocab.length; i++) {
+        var w = line.vocab[i] && line.vocab[i].w;
+        if (!w) continue;
+        var ew = lyricsEsc(w);
+        if (text.indexOf(ew) >= 0) {
+            text = text.split(ew).join('<span class="lyrics-vocab-mark">' + ew + '</span>');
+        }
+    }
+    return text;
+}
+
+function renderLyrics() {
+    var card = document.getElementById('lyricsCard');
+    if (!card) return;
+    var L = window.KOREAN_LYRICS;
+    var song = document.getElementById('lyricsSong');
+    var lines = (L && Array.isArray(L.lines)) ? L.lines.filter(function (x) { return x && x.ko; }) : [];
+
+    var showTitle = L && L.title && L.title.indexOf('待替换') < 0 && L.title.indexOf('示例') < 0;
+    if (song) song.textContent = showTitle ? '· ' + L.title : '';
+
+    if (lines.length === 0) {
+        card.innerHTML = '<div class="lyrics-empty">还没有歌词。把歌词填到 <code>lyrics.js</code> 里即可（每天自动换一句）。</div>';
+        return;
+    }
+
+    var idx = lyricsDayIndex(lines.length);
+    var line = lines[idx];
+    var off = parseInt(localStorage.getItem(LYRICS_OFFSET_KEY) || '0', 10) || 0;
+
+    var html = '';
+    html += '<div class="lyrics-meta">第 ' + (idx + 1) + ' / ' + lines.length + ' 句' +
+        (off !== 0 ? ' <span class="lyrics-offtag">（翻看中）</span>' : '') + '</div>';
+    html += '<div class="lyrics-ko">' + lyricsMarkVocab(line) + '</div>';
+    html += '<div class="lyrics-zh">' + lyricsEsc(line.zh) + '</div>';
+
+    if (line.vocab && line.vocab.length) {
+        html += '<button class="lyrics-vocab-btn" onclick="toggleLyricsVocab()">' +
+            (lyricsShowVocab ? '隐藏词汇' : '显示词汇') + '</button>';
+        if (lyricsShowVocab) {
+            html += '<div class="lyrics-vocab-list">';
+            for (var i = 0; i < line.vocab.length; i++) {
+                var v = line.vocab[i] || {};
+                html += '<div class="lyrics-vocab-item"><span class="lyrics-vocab-w">' + lyricsEsc(v.w) +
+                    '</span><span class="lyrics-vocab-m">' + lyricsEsc(v.m) + '</span></div>';
+            }
+            html += '</div>';
+        }
+    }
+
+    html += '<div class="lyrics-nav">';
+    html += '<button onclick="shiftLyrics(-1)">← 上一句</button>';
+    if (off !== 0) html += '<button class="lyrics-today-btn" onclick="shiftLyrics(0)">回到今天</button>';
+    html += '<button onclick="shiftLyrics(1)">下一句 →</button>';
+    html += '</div>';
+
+    card.innerHTML = html;
+}
+
+window.toggleLyricsVocab = function () {
+    lyricsShowVocab = !lyricsShowVocab;
+    renderLyrics();
+};
+
+window.shiftLyrics = function (delta) {
+    if (delta === 0) {
+        localStorage.removeItem(LYRICS_OFFSET_KEY);
+    } else {
+        var off = parseInt(localStorage.getItem(LYRICS_OFFSET_KEY) || '0', 10) || 0;
+        localStorage.setItem(LYRICS_OFFSET_KEY, String(off + delta));
+    }
+    renderLyrics();
+};

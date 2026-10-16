@@ -87,6 +87,11 @@
                         </div>
                     </div>
 
+                    <div class="lyrics-section" id="lyricsSection">
+                        <h2>每日韩语歌词 <span class="lyrics-song" id="lyricsSong"></span></h2>
+                        <div id="lyricsCard" class="lyrics-card"></div>
+                    </div>
+
                     <div class="resource-section">
                         <h2>资料库 <button class="resource-add-btn" onclick="openAddResourceModal()">+</button></h2>
                         <div id="resourceCards" class="resource-cards"></div>
@@ -215,8 +220,19 @@
         </div>
     </div>
 
+    <!-- 悬浮待办面板：固定在页面最上层（可拖动） -->
+    <div id="floatingPanel" class="floating-panel" style="display:none;">
+        <div class="floating-header" id="floatingHeader">
+            <span class="floating-header-title">📌 悬浮待办</span>
+            <button class="floating-min-btn" onclick="toggleFloatingMin()" title="收起 / 展开">－</button>
+            <button class="floating-close-btn" onclick="closeFloatingPanel()" title="关闭（取消全部固定）">&times;</button>
+        </div>
+        <div class="floating-body" id="floatingBody"></div>
+    </div>
+
     <!-- 数据层 & 云同步（GitHub Gist）：必须先于 app.js 加载 -->
     <script src="sync.js"></script>
+    <script src="lyrics.js"></script>
     <script src="app.js"></script>
     <script>
         // 注册 Service Worker，让网页可以“安装”到手机主屏幕，像 App 一样点击打开

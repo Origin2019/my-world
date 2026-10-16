@@ -339,6 +339,18 @@ header h1 {
     font-weight: bold;
 }
 
+/* 「开组会」专属配色：琥珀金，和原来的橙色同属暖色系但不撞色 */
+.ddl-item.ddl-group-meeting {
+    background: #fff8e6;
+    border-left-color: #c9a227;
+}
+.ddl-item.ddl-group-meeting .ddl-title {
+    color: #7a5c00;
+}
+.ddl-item.ddl-group-meeting .ddl-countdown {
+    color: #a07d14;
+}
+
 .right-panel {
     flex: 1;
     display: flex;
@@ -1565,6 +1577,244 @@ header h1 {
 .cloud-backup button:hover { background: #f0f0f0; color: #333; }
 
 /* ===================== 手机 / 窄屏适配 ===================== */
+/* ===================== 悬浮待办面板 ===================== */
+.floating-panel {
+    position: fixed;
+    right: 14px;
+    top: 86px;
+    width: 260px;
+    max-width: 88vw;
+    max-height: 70vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    border: 1px solid #D4C4B0;
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    z-index: 99999;
+    font-size: 0.8rem;
+}
+
+.floating-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    background: linear-gradient(135deg, #7CB342, #9CCC65);
+    color: #fff;
+    border-radius: 9px 9px 0 0;
+    cursor: move;
+    user-select: none;
+    touch-action: none;
+}
+
+.floating-header-title {
+    flex: 1;
+    font-weight: bold;
+    font-size: 0.76rem;
+}
+
+.floating-min-btn,
+.floating-close-btn {
+    border: none;
+    background: rgba(255, 255, 255, 0.22);
+    color: #fff;
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.75rem;
+    line-height: 1;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.floating-min-btn:hover,
+.floating-close-btn:hover { background: rgba(255, 255, 255, 0.4); }
+
+.floating-body {
+    padding: 8px;
+    overflow-y: auto;
+}
+
+.floating-panel.floating-min .floating-body { display: none; }
+
+.floating-todo {
+    padding: 6px 0;
+    border-bottom: 1px dashed #e2e8f0;
+}
+
+.floating-todo:last-child { border-bottom: none; }
+
+.floating-todo-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+}
+
+.floating-todo-text {
+    flex: 1;
+    font-weight: bold;
+    color: #2d3748;
+    word-break: break-all;
+}
+
+.floating-todo.done .floating-todo-text {
+    color: #a0aec0;
+    text-decoration: line-through;
+}
+
+.floating-todo-unpin {
+    border: none;
+    background: transparent;
+    color: #a0aec0;
+    cursor: pointer;
+    font-size: 0.9rem;
+    line-height: 1;
+    padding: 0 2px;
+}
+
+.floating-todo-unpin:hover { color: #e53e3e; }
+
+.floating-subgrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(26px, 1fr));
+    gap: 3px;
+    margin-top: 5px;
+}
+
+.floating-sub {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    font-size: 0.66rem;
+    color: #718096;
+    cursor: pointer;
+}
+
+.floating-sub input[type="checkbox"] {
+    width: 13px;
+    height: 13px;
+    margin: 0;
+    cursor: pointer;
+    accent-color: #7CB342;
+}
+
+.floating-sub input[type="checkbox"]:checked ~ span {
+    color: #a0aec0;
+    text-decoration: line-through;
+}
+
+/* ===================== 每日韩语歌词 ===================== */
+.lyrics-section {
+    border-top: 1px solid #e2e8f0;
+    padding: 10px 14px 12px;
+}
+
+.lyrics-section h2 {
+    font-size: 0.9rem;
+    color: #7CB342;
+    margin-bottom: 6px;
+}
+
+.lyrics-song {
+    font-size: 0.72rem;
+    color: #a0aec0;
+    font-weight: normal;
+}
+
+.lyrics-card {
+    background: #f7fbf3;
+    border: 1px solid #dcecd0;
+    border-radius: 8px;
+    padding: 10px 12px;
+}
+
+.lyrics-empty { font-size: 0.75rem; color: #a0aec0; }
+.lyrics-empty code { background: #eee; padding: 0 3px; border-radius: 3px; }
+
+.lyrics-meta {
+    font-size: 0.68rem;
+    color: #a0aec0;
+    margin-bottom: 4px;
+}
+
+.lyrics-offtag { color: #dd6b20; }
+
+.lyrics-ko {
+    font-size: 1.05rem;
+    font-weight: bold;
+    color: #2d3748;
+    line-height: 1.5;
+    word-break: break-all;
+}
+
+.lyrics-vocab-mark {
+    color: #d69e2e;
+    border-bottom: 2px solid #f6e05e;
+    padding-bottom: 1px;
+}
+
+.lyrics-zh {
+    font-size: 0.8rem;
+    color: #4a5568;
+    margin-top: 3px;
+}
+
+.lyrics-vocab-btn {
+    margin-top: 8px;
+    border: 1px solid #c6e1b0;
+    background: #fff;
+    color: #5f8c2e;
+    border-radius: 5px;
+    padding: 3px 10px;
+    font-size: 0.72rem;
+    cursor: pointer;
+}
+
+.lyrics-vocab-btn:hover { background: #f0f9e8; }
+
+.lyrics-vocab-list {
+    margin-top: 6px;
+    border-top: 1px dashed #dcecd0;
+    padding-top: 6px;
+}
+
+.lyrics-vocab-item {
+    display: flex;
+    gap: 8px;
+    font-size: 0.75rem;
+    padding: 2px 0;
+}
+
+.lyrics-vocab-w { color: #2d3748; font-weight: bold; min-width: 70px; }
+.lyrics-vocab-m { color: #718096; }
+
+.lyrics-nav {
+    display: flex;
+    gap: 6px;
+    margin-top: 9px;
+    align-items: center;
+}
+
+.lyrics-nav button {
+    border: 1px solid #dcecd0;
+    background: #fff;
+    color: #5f8c2e;
+    border-radius: 5px;
+    padding: 3px 8px;
+    font-size: 0.7rem;
+    cursor: pointer;
+}
+
+.lyrics-nav button:hover { background: #f0f9e8; }
+.lyrics-today-btn { color: #dd6b20 !important; border-color: #f6d8b8 !important; }
+
 @media (max-width: 820px) {
     body {
         height: auto;
@@ -1617,4 +1867,12 @@ header h1 {
     .note-card { width: auto; }
 
     .note-modal { width: 94%; max-width: none; max-height: 90vh; }
+
+    .floating-panel {
+        width: 230px;
+        max-height: 58vh;
+        font-size: 0.78rem;
+    }
+    .lyrics-section { padding: 10px 12px 12px; }
+    .lyrics-ko { font-size: 1rem; }
 }

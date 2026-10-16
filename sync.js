@@ -1,4 +1,4 @@
-/* ============================================================
+﻿/* ============================================================
  * 我的世界 · 数据层 & 云同步（GitHub Gist 版）
  * ------------------------------------------------------------
  *  · 本地 localStorage 始终是随时可用的工作副本
@@ -19,10 +19,16 @@
     var TOKEN_KEY = '__gh_token';     // GitHub Token
     var GIST_KEY = '__gh_gist';       // Gist ID
     var PAIRED_KEY = '__gh_paired';   // 是否已完成首次配对
+    var BASE_KEY = '__sync_base_ts';  // 上次同步时云端的版本号（用于判断"云端是否被别的设备改过"）
     var BACKUP_KEY = '__last_backup'; // 上次覆盖前的数据备份
     var GIST_FILE = 'my-world.json';
-    var POLL_MS = 60000;              // 轮询云端间隔（配合 ETag，命中缓存不消耗额度）
-    var TOLERANCE = 2000;             // 时间比较容差（毫秒）
+    var POLL_MS = 60000;              // 轮询云端间隔
+    var TOLERANCE = 60000;            // 时间比较容差（毫秒）。放宽到 1 分钟，
+                                      // 这样两台设备系统时间有秒级差异时，本机刚做的修改不会被误判成"旧的"。
+    // 页面刚打开的几秒内，app.js 会自动补写数据（补待办、补组会等）。
+    // 这些是程序初始化产生的，不算"用户改动"，否则会让旧设备反过来覆盖云端的新数据。
+    var WARMUP_MS = 3000;
+    var warmupUntil = Date.now() + WARMUP_MS;
 
     // 保存原生方法（下面会被 hook 覆盖）
     var Native = {
@@ -78,6 +84,13 @@
     function setLocalTs(t) {
         Native.setItem.call(localStorage, META_KEY, String(t));
     }
+    // 上次和云端“对齐”时的云端版本号
+    function baseTs() {
+        return parseInt(localStorage.getItem(BASE_KEY) || '0', 10) || 0;
+    }
+    function setBaseTs(t) {
+        Native.setItem.call(localStorage, BASE_KEY, String(t));
+    }
 
     function isEmptyData(obj) {
         return !obj || typeof obj !== 'object' || Object.keys(obj).length === 0;
@@ -102,7 +115,6 @@
     var dirty = false;          // 本机是否有还没上传的改动
     var lastRemoteTs = 0;
     var cloudHash = '';         // 上次同步时云端数据的指纹
-    var lastEtag = null;        // 条件请求用：命中 304 不消耗 API 额度
     var pendingRemote = null;   // 首次配对时等待用户选择的云端数据
 
     var BADGE = {
@@ -112,23 +124,22 @@
         error: '☁ 同步失败'
     };
 
-    function ghFetch(path, options, wantMeta) {
+    function ghFetch(path, options) {
         options = options || {};
         var headers = {
             'Authorization': 'Bearer ' + token,
             'Accept': 'application/vnd.github+json',
             'X-GitHub-Api-Version': '2022-11-28'
         };
-        if (options.body) headers['Content-Type'] = 'application/json';
-        if (wantMeta && lastEtag) headers['If-None-Match'] = lastEtag;
+        if (options.body) {
+            headers['Content-Type'] = 'application/json';
+        } else {
+            options.cache = 'no-store';   // 保证每次拿到的是最新数据，不走浏览器缓存
+        }
         options.headers = headers;
 
         return fetch('https://api.github.com' + path, options).then(function (res) {
-            var etag = res.headers.get('ETag');
             return res.text().then(function (text) {
-                // 304：云端没变化。GitHub 规定 304 不消耗请求额度
-                if (res.status === 304) return { notModified: true };
-
                 var body = null;
                 try { body = text ? JSON.parse(text) : null; } catch (e) { body = { message: text }; }
 
@@ -147,10 +158,6 @@
                         }
                     }
                     throw new Error(msg);
-                }
-                if (wantMeta) {
-                    if (etag) lastEtag = etag;
-                    return { notModified: false, body: body };
                 }
                 return body;
             });
@@ -227,28 +234,32 @@
     /* ================= 同步核心 ================= */
     // 读取云端数据；返回 null 表示云端还没有这个文件
     function fetchRemote() {
-        return ghFetch('/gists/' + gistId, {}, true).then(function (r) {
-            if (!r || r.notModified) return { __notModified: true };
-            var g = r.body || {};
+        return ghFetch('/gists/' + gistId).then(function (g) {
+            g = g || {};
             var f = g.files && g.files[GIST_FILE];
-            if (!f) return null;
+            if (!f) { dlog('fetchRemote: 找不到文件 ' + GIST_FILE + '，files=' + Object.keys(g.files || {}).join(',')); return null; }
             var getText;
             if (f.content) {
                 getText = Promise.resolve(f.content);
             } else if (f.truncated && f.raw_url) {
-                getText = fetch(f.raw_url, { headers: { 'Authorization': 'Bearer ' + token } })
+                getText = fetch(f.raw_url, { headers: { 'Authorization': 'Bearer ' + token }, cache: 'no-store' })
                     .then(function (x) { return x.text(); });
             } else {
                 getText = Promise.resolve('');
             }
             return getText.then(function (text) {
-                try { return JSON.parse(text); } catch (e) { return { __broken: true }; }
+                try {
+                    var o = JSON.parse(text);
+                    dlog('fetchRemote OK: updatedAt=' + o.updatedAt + ' dataKeys=' + Object.keys(o.data || {}).length + ' rawLen=' + text.length);
+                    return o;
+                } catch (e) { dlog('fetchRemote 解析失败: ' + String(text).slice(0, 80)); return { __broken: true }; }
             });
         });
     }
 
     // 上传本机数据到云端
     function push() {
+        dlog('push 被调用: ' + String(new Error().stack || '').split('\n').slice(1, 4).join(' << '));
         // 首次配对等用户选择期间，绝对不上传
         if (pendingRemote) return Promise.resolve();
         if (!token || !gistId) return Promise.resolve();
@@ -264,8 +275,8 @@
         }).then(function () {
             lastRemoteTs = ts;
             cloudHash = dataHash(data);
+            setBaseTs(ts);
             dirty = false;
-            lastEtag = null;   // 内容变了，下次重新读
             setStatus('on', '已同步 · ' + new Date().toLocaleTimeString());
         }).catch(function (err) {
             setStatus('error', '❌ 上传失败：' + err.message);
@@ -287,26 +298,26 @@
         applySnapshot(obj.data);
         cloudHash = dataHash(obj.data);
         setLocalTs(ts);
+        setBaseTs(ts);
         Native.setItem.call(localStorage, PAIRED_KEY, '1');
         dirty = false;
-        setStatus('on', '已拉取云端更新，正在刷新…');
+        setStatus('on', '已拉取云端更新（本机改动已备份，可用「↩ 恢复本机备份」找回），正在刷新…');
         setTimeout(function () { location.reload(); }, 300);
     }
 
     // 一次自动同步
+    var dbgLog = [];
+    function dlog(s) { dbgLog.push(s); if (dbgLog.length > 60) dbgLog.shift(); }
+
     function sync() {
+        dlog('sync进入 busy=' + busy + ' dirty=' + dirty + ' pending=' + !!pendingRemote + ' sup=' + suppress + ' token=' + !!token + ' gist=' + gistId);
         if (pendingRemote) return Promise.resolve();   // 等用户选择时暂停
-        if (!token || !gistId || busy || suppress) return Promise.resolve();
+        if (!token || !gistId || busy || suppress) { dlog('sync提前退出'); return Promise.resolve(); }
         busy = true;
         return fetchRemote()
             .then(function (obj) {
                 busy = false;
 
-                // 云端没变化（304）
-                if (obj && obj.__notModified) {
-                    if (dirty) return push();
-                    return;
-                }
                 // 云端还没有文件 → 上传
                 if (!obj) return push();
                 // 云端文件损坏 → 不覆盖，用本机数据修复
@@ -321,29 +332,41 @@
 
                 var myHash = dataHash(snapshot());
                 var rcHash = dataHash(obj.data);
+                var base = baseTs();
+                var cloudMoved = remoteTs > base;   // 云端在"上次对齐之后"被别的设备改过
 
                 // ① 两边内容完全一样 → 已同步，什么都不做
                 if (myHash === rcHash) {
                     cloudHash = rcHash;
                     dirty = false;
+                    if (cloudMoved) setBaseTs(remoteTs);
                     if (localTs() < remoteTs) setLocalTs(remoteTs);
                     return;
                 }
-                // ② 本机有未上传的改动 → 上传（本机优先）
-                if (dirty) return push();
 
                 var rEmpty = isEmptyData(obj.data);
                 var lEmpty = isEmptyData(snapshot());
+
+                // ② 本机有未上传的改动
+                if (dirty) {
+                    // 云端也被别的设备改过、而且比本机这次改动更新 → 以云端为准（会先备份本机）
+                    if (cloudMoved && remoteTs > localTs() + TOLERANCE) return applyRemote(obj);
+                    // 只有"云端确实被改过"才需要备份（否则云端就是我们对齐过的版本，备份没意义，
+                    // 反而会把刚才保存的那份覆盖掉）
+                    if (cloudMoved) saveBackup('被本机数据覆盖的云端数据', obj.data);
+                    return push();
+                }
+
                 // ③ 云端空、本机有 → 上传
                 if (rEmpty && !lEmpty) return push();
                 // ④ 本机空、云端有 → 下载
                 if (lEmpty && !rEmpty) return applyRemote(obj);
                 // ⑤ 两边都空 → 无
                 if (rEmpty && lEmpty) return;
-                // ⑥ 内容不同且云端更新 → 下载
-                if (remoteTs > localTs() + TOLERANCE) return applyRemote(obj);
-                // ⑦ 内容不同但本机更新 → 上传
-                if (localTs() > remoteTs + TOLERANCE) return push();
+                // ⑥ 云端有别的设备推上来的更新 → 下载（旧设备不会覆盖新数据）
+                if (cloudMoved) return applyRemote(obj);
+                // ⑦ 其余情况以本机为准 → 上传（云端没被改过，无需备份）
+                return push();
             })
             .catch(function (err) {
                 busy = false;
@@ -397,7 +420,6 @@
     /* ================= 连接 / 断开 ================= */
     function connect(tok) {
         token = tok;
-        lastEtag = null;
         setStatus('syncing', '正在验证 Token…');
         return withTimeout(ghFetch('/user'), 20000, '验证')
             .then(function (u) {
@@ -443,7 +465,7 @@
                 }
                 // 云端已有仓库：先读出来看看
                 return fetchRemote().then(function (obj) {
-                    if (!obj || obj.__notModified || isEmptyData(obj.data)) {
+                    if (!obj || isEmptyData(obj.data)) {
                         setStatus('syncing', '云端还是空的，正在上传本机数据…');
                         return push();
                     }
@@ -472,10 +494,10 @@
         Native.removeItem.call(localStorage, TOKEN_KEY);
         Native.removeItem.call(localStorage, GIST_KEY);
         Native.removeItem.call(localStorage, PAIRED_KEY);
+        Native.removeItem.call(localStorage, BASE_KEY);
         token = null;
         gistId = null;
         userLogin = '';
-        lastEtag = null;
         pendingRemote = null;
         setStatus('off', '已断开连接（本机数据保留，云端 Gist 未删除）');
     }
@@ -511,7 +533,16 @@
         schedulePush: schedulePush,
         push: push,
         sync: sync,
-        active: function () { return !!token; }
+        active: function () { return !!token; },
+        dbg: function () {
+            return {
+                token: !!token, gistId: gistId, busy: busy, dirty: dirty,
+                suppress: suppress, pending: !!pendingRemote,
+                base: baseTs(), local: localTs(),
+                warmupLeft: Math.max(0, warmupUntil - Date.now()),
+                log: dbgLog.slice()
+            };
+        }
     };
 
     /* ================= 面板交互 ================= */
@@ -553,7 +584,7 @@
         if (!window.confirm('确定要用本机数据覆盖云端吗？\n（云端现有数据会被替换，可用「↩ 恢复上次数据」找回）')) return;
         setStatus('syncing', '正在上传本机数据…');
         fetchRemote().then(function (obj) {
-            if (obj && !obj.__notModified && !isEmptyData(obj.data)) {
+            if (obj && !isEmptyData(obj.data)) {
                 saveBackup('被本机数据覆盖的云端数据', obj.data);
             }
             dirty = true;
@@ -639,36 +670,74 @@
 
     /* ================= hook 本地写入 ================= */
     // 只有「内容真的变了」才算本地改动。
-    // app.js 每次打开都会把同一份数据重写一遍（内容是幂等的），
-    // 用值比对可以避免把它误判成用户编辑，从而防止设备之间来回改动、
-    // 无谓地消耗 GitHub 请求额度。
+    //  1) app.js 每次打开都会把同一份数据重写一遍（内容是幂等的），
+    //     用值比对可以避免把它误判成用户编辑；
+    //  2) 页面刚打开的几秒是程序初始化（补待办/组会等），也不算用户改动。
+    // 两者都排除后，旧设备就不会反过来覆盖云端的新数据了。
+    function markLocalChange() {
+        if (Date.now() < warmupUntil) return;
+        setLocalTs(Date.now());
+        dirty = true;
+        schedulePush();
+    }
     Storage.prototype.setItem = function (k, v) {
         var old = this.getItem(k);
         Native.setItem.call(this, k, v);
         if (this === localStorage && !isInternal(k) && !suppress && old !== String(v)) {
-            setLocalTs(Date.now());
-            dirty = true;
-            schedulePush();
+            markLocalChange();
         }
     };
     Storage.prototype.removeItem = function (k) {
         var had = this.getItem(k) !== null;
         Native.removeItem.call(this, k);
         if (this === localStorage && !isInternal(k) && !suppress && had) {
-            setLocalTs(Date.now());
-            dirty = true;
-            schedulePush();
+            markLocalChange();
         }
     };
     Storage.prototype.clear = function () {
         var had = this.length > 0;
         Native.clear.call(this);
         if (this === localStorage && !suppress && had) {
-            setLocalTs(Date.now());
-            dirty = true;
-            schedulePush();
+            markLocalChange();
         }
     };
+
+    /* ================= 让同步更“及时” ================= */
+    // 关页面/切走之前，把还没上传的改动用 keepalive 请求赶紧发出去
+    function flushPush() {
+        if (!dirty || !token || !gistId || pendingRemote || suppress) return;
+        var data = snapshot();
+        var ts = Math.max(Date.now(), lastRemoteTs + 1);
+        var files = {};
+        files[GIST_FILE] = { content: JSON.stringify({ updatedAt: ts, data: data }) };
+        try {
+            fetch('https://api.github.com/gists/' + gistId, {
+                method: 'PATCH',
+                headers: {
+                    'Authorization': 'Bearer ' + token,
+                    'Accept': 'application/vnd.github+json',
+                    'X-GitHub-Api-Version': '2022-11-28',
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ files: files }),
+                keepalive: true
+            }).then(function (r) {
+                if (r && r.ok) { lastRemoteTs = ts; setLocalTs(ts); setBaseTs(ts); cloudHash = dataHash(data); dirty = false; }
+            }).catch(function () { /* 失败就保持 dirty，下次自动重试 */ });
+        } catch (e) { /* keepalive 有大小限制，超了就忽略 */ }
+    }
+
+    // 从后台切回来、窗口重新获得焦点、网络恢复 → 立刻同步一次，不用等轮询
+    document.addEventListener('visibilitychange', function () {
+        if (!document.hidden) sync();
+    });
+    window.addEventListener('focus', function () { sync(); });
+    window.addEventListener('online', function () { sync(); });
+    // 锁屏/关标签页/切 App：先把改动推上去
+    window.addEventListener('pagehide', flushPush);
+    document.addEventListener('visibilitychange', function () {
+        if (document.hidden) flushPush();
+    });
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', boot);
