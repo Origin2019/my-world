@@ -1870,6 +1870,13 @@ header h1 {
 
     .note-modal { width: 94%; max-width: none; max-height: 90vh; }
 
+    /* 进度格子任务：手机上一行最多 6 个，且缩进/间隙收紧，保证不会挤出卡片 */
+    .todo-subtask-panel { padding: 8px 8px 8px 14px; }
+    .todo-subtask-grid { gap: 3px; }
+    .todo-subtask-item { min-width: 0; padding: 3px 2px; }
+    .subtask-label { min-width: 12px; font-size: 0.7rem; }
+    .floating-subgrid { grid-template-columns: repeat(auto-fill, minmax(30px, 1fr)); }
+
     .floating-panel {
         width: 230px;
         max-height: 58vh;

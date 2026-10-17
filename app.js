@@ -737,7 +737,7 @@ function renderTodos() {
         }
         html += '</li>';
         if (todos[i].hasProgress && todos[i].subTasks && todos[i].expanded) {
-            var cols = todos[i].subTasks.length <= 10 ? 5 : (todos[i].subTasks.length <= 20 ? 6 : 7);
+            var cols = subtaskGridCols(todos[i].subTasks.length);
             html += '<li class="todo-subtask-panel">';
             html += '<div class="todo-subtask-grid" style="grid-template-columns: repeat(' + cols + ', 1fr);">';
             for (var j = 0; j < todos[i].subTasks.length; j++) {
@@ -870,6 +870,13 @@ function getCompletedCount(subTasks) {
     var c = 0;
     for (var k = 0; k < subTasks.length; k++) { if (subTasks[k]) c++; }
     return c;
+}
+
+// 进度格子每行放几个：宽屏按数量最多 7 个；窄屏（手机）最多 6 个，免得排太宽挤出卡片
+function subtaskGridCols(count) {
+    var cols = count <= 10 ? 5 : (count <= 20 ? 6 : 7);
+    if (window.innerWidth <= 820 && cols > 6) cols = 6;
+    return cols;
 }
 
 function toggleSubTask(todoIdx, subIdx) {
@@ -2088,6 +2095,13 @@ document.addEventListener('DOMContentLoaded', function() {
     renderFloating();
     initFloatingDrag();
     renderLyrics();
+
+    // 横竖屏切换 / 窗口拉宽拉窄跨过 820px 时，重排一次（进度格子的每行个数会变）
+    var lastNarrow = window.innerWidth <= 820;
+    window.addEventListener('resize', function () {
+        var narrow = window.innerWidth <= 820;
+        if (narrow !== lastNarrow) { lastNarrow = narrow; renderTodos(); }
+    });
 });
 
 /* ================= 每日韩语歌词 ================= */
