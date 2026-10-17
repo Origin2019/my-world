@@ -9,6 +9,36 @@ if (dataVersion !== '3') {
 }
 
 let todos = JSON.parse(localStorage.getItem('todos')) || [];
+
+/* ================= 待办唯一 id =================
+ * 只靠 createdAt 认不出“同一批一起创建”的待办（它们时间戳一模一样），
+ * 固定悬浮窗时会认错人（认成另一条没有进度条的），表现就是“点了没反应”。
+ * 所以给每条待办补一个唯一 id。 */
+function newTodoId() {
+    return 'td' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+function simpleHash32(str) {
+    var h = 5381;
+    for (var i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+    return (h >>> 0).toString(36);
+}
+
+// 给老数据补 id（只补缺失的，补完就落盘）。
+// 同样的老数据在任何设备上算出的 id 都相同，所以同步时不会两台设备互相打架。
+function ensureTodoIds() {
+    var changed = false, seen = {};
+    for (var i = 0; i < todos.length; i++) {
+        var base = String(todos[i].text || '') + '|' + String(todos[i].createdAt || '');
+        seen[base] = (seen[base] || 0) + 1;              // 同批重复的靠序号区分
+        if (!todos[i].id) {
+            todos[i].id = 'td' + simpleHash32(base + '#' + seen[base]);
+            changed = true;
+        }
+    }
+    if (changed) localStorage.setItem('todos', JSON.stringify(todos));
+    return changed;
+}
 // 已停止每日自动生成“写666件事”，顺带清掉历史遗留的自动生成记录（手动添加的不受影响）
 var cleaned666 = todos.filter(function(t) { return !(t.text === '写666件事' && t.autoDate); });
 if (cleaned666.length !== todos.length) {
@@ -681,6 +711,7 @@ function onScheduleRightClick(e, scheduleId) {
 }
 
 function renderTodos() {
+    ensureTodoIds();     // 老数据补唯一 id（固定悬浮窗要靠它认人）
     var todoList = document.getElementById('todoItems');
     var visible = todos.filter(function(t) { return !t.hidden; });
     if (visible.length === 0) { todoList.innerHTML = '<div class="empty-message">暂无待办事项</div>'; renderFloating(); return; }
@@ -861,6 +892,7 @@ function toggleExpand(index) {
 }
 
 function openFloating(index) {
+    ensureTodoIds();
     var t = todos[index];
     if (!t) return;
     if (!t.hasProgress || !t.subTasks) {
@@ -889,13 +921,40 @@ function setFloatingKeys(keys) {
     localStorage.setItem(FLOAT_KEY, JSON.stringify(keys));
 }
 function todoKeyOf(t) {
-    return String(t.createdAt || t.text || '');
+    return String(t.id || t.createdAt || t.text || '');
 }
 function findTodoByKey(key) {
     for (var i = 0; i < todos.length; i++) {
         if (todoKeyOf(todos[i]) === key) return i;
     }
     return -1;
+}
+
+// 把旧版存下的“固定名单”（用 createdAt/文本当钥匙）换成新版的 id，
+// 免得升级后原来固定好的待办凭空消失。
+function migrateFloatingKeys() {
+    var keys;
+    try { keys = JSON.parse(localStorage.getItem(FLOAT_KEY)); } catch (e) { return; }
+    if (!Array.isArray(keys) || keys.length === 0) return;
+    var out = [], changed = false;
+    for (var i = 0; i < keys.length; i++) {
+        var k = keys[i];
+        if (todos.some(function (t) { return t.id === k; })) { out.push(k); continue; }
+        // 旧钥匙：退回用 createdAt/文本去找，优先找“带进度条的那条”
+        var found = -1, fallback = -1;
+        for (var j = 0; j < todos.length; j++) {
+            if (String(todos[j].createdAt || todos[j].text || '') !== k) continue;
+            if (fallback < 0) fallback = j;
+            if (todos[j].hasProgress && todos[j].subTasks) { found = j; break; }
+        }
+        if (found < 0) found = fallback;
+        if (found >= 0) {
+            var nid = todoKeyOf(todos[found]);
+            if (out.indexOf(nid) < 0) out.push(nid);
+            changed = true;
+        } else changed = true;      // 待办已不存在 → 丢掉这个固定项
+    }
+    if (changed) setFloatingKeys(out);
 }
 
 function unpinFloatingAt(i) {
@@ -1709,6 +1768,8 @@ function getCurrentWeek() {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+    ensureTodoIds();          // 先给老数据补唯一 id（必须在任何渲染之前）
+    migrateFloatingKeys();    // 再把旧版固定名单换成新 id，免得原来固定好的待办消失
     cleanCompletedTodos();
     renderTodos();
     renderDDLs();
