@@ -19,6 +19,23 @@ const TYPES = {
 http.createServer(function (req, res) {
     var p = decodeURIComponent(req.url.split('?')[0]);
     if (p === '/') p = '/index.html';
+
+    // 只读接口：把本机「每日一题/数据/daily-questions.json」交给网页，
+    // 这样本地预览时点「导入题目」可以自动读取，不用手动选文件。
+    if (p === '/api/daily-questions') {
+        var dailyFile = path.join(ROOT, '..', '每日一题', '数据', 'daily-questions.json');
+        fs.readFile(dailyFile, function (err, data) {
+            if (err) {
+                res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+                res.end('还没有 daily-questions.json，请先运行 py daily.py 出题');
+                return;
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(data);
+        });
+        return;
+    }
+
     var file = path.join(ROOT, p);
     fs.readFile(file, function (err, data) {
         if (err) { res.writeHead(404); res.end('404 Not Found'); return; }

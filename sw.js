@@ -1,7 +1,7 @@
 /* Service Worker：让网页可“安装”到主屏幕，并在断网时仍能打开界面。
  * 策略：同源资源「网络优先（强制向服务器校验，不用本地过期缓存），失败回退缓存」，
  *       保证每次都能拿到最新代码，不会出现「新 JS 配旧 HTML」的错配。 */
-var CACHE = 'myworld-v7';
+var CACHE = 'myworld-v8';
 var ASSETS = [
     './',
     './index.html',

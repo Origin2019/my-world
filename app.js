@@ -47,6 +47,13 @@ if (cleaned666.length !== todos.length) {
 }
 let ddls = JSON.parse(localStorage.getItem('ddls')) || [];
 let resources = JSON.parse(localStorage.getItem('resources')) || [];
+// 每日一题：元素格式 {date, subject, topic, title, difficulty, minutes, question, answer}
+// 由「📂 导入题目」从 daily.py 生成的 JSON 合并进来，键名非 __ 开头，会自动云同步。
+let dailyQuestions = JSON.parse(localStorage.getItem('dailyQuestions')) || [];
+// 当前查看的题目下标：-2 = 还没初始化（自动选今天），-1 = 没有题
+var dailyCurrentIndex = -2;
+// 科目筛选：null = 还没选过（自动用第一个科目）；否则只显示该科目（顶部按钮切换）
+var dailySubjectFilter = null;
 
 var savedCourses = localStorage.getItem('courses');
 var defaultCourses = [
@@ -1826,7 +1833,9 @@ document.addEventListener('DOMContentLoaded', function() {
             var tabId = btn.getAttribute('data-tab');
             document.getElementById('tab-tasks').style.display = tabId === 'tasks' ? 'flex' : 'none';
             document.getElementById('tab-notes').style.display = tabId === 'notes' ? 'flex' : 'none';
+            document.getElementById('tab-daily').style.display = tabId === 'daily' ? 'flex' : 'none';
             if (tabId === 'tasks') fitSchedule();
+            if (tabId === 'daily') renderDaily();
         });
     });
 
@@ -2095,6 +2104,7 @@ document.addEventListener('DOMContentLoaded', function() {
     renderFloating();
     initFloatingDrag();
     renderLyrics();
+    renderDaily();
 
     // 横竖屏切换 / 窗口拉宽拉窄跨过 820px 时，重排一次（进度格子的每行个数会变）
     var lastNarrow = window.innerWidth <= 820;
@@ -2205,4 +2215,411 @@ window.shiftLyrics = function (delta) {
         localStorage.setItem(LYRICS_OFFSET_KEY, String(off + delta));
     }
     renderLyrics();
+};
+
+/* ================= 每日一题 =================
+ * 出题仍在本机「每日一题」目录用 daily.py 完成（要调 API + 第二遍审题），
+ * 这里只负责「看题」：daily.py 生成的 数据/daily-questions.json 通过
+ * 「📂 导入题目」合并进 localStorage，之后和任务/便签一样自动云同步。 */
+
+function dailyEscapeHtml(s) {
+    return String(s === undefined || s === null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// 行内 Markdown：先保护数学公式，再转义，最后还原公式交给 KaTeX
+function dailyInlineMd(text) {
+    var mathStore = [];
+    text = String(text || '').replace(/\$\$[\s\S]+?\$\$|\$[^$\n]+?\$/g, function (m) {
+        mathStore.push(m);
+        return '\u0000MATH' + (mathStore.length - 1) + '\u0000';
+    });
+    text = dailyEscapeHtml(text);
+    text = text.replace(/`([^`]+)`/g, function (m, p1) { return '<code>' + p1 + '</code>'; });
+    text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    text = text.replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
+    text = text.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, function (m, p1, p2) {
+        return '<a href="' + p2 + '" target="_blank" rel="noopener">' + p1 + '</a>';
+    });
+    for (var i = 0; i < mathStore.length; i++) {
+        text = text.split('\u0000MATH' + i + '\u0000').join(mathStore[i]);
+    }
+    return text;
+}
+
+// 块级 Markdown：代码块 / 标题 / 引用 / 表格 / 列表 / 段落
+function dailyMd(src) {
+    var lines = String(src || '').replace(/\r\n/g, '\n').split('\n');
+    var out = [];
+    var i = 0;
+
+    function isTableSep(line) {
+        var s = line.trim();
+        return !!s && s.indexOf('|') >= 0 && /^[\s|:\-]+$/.test(s) && s.indexOf('-') >= 0;
+    }
+
+    while (i < lines.length) {
+        var line = lines[i];
+        var stripped = line.trim();
+
+        if (stripped.indexOf('```') === 0) {
+            var lang = stripped.slice(3).trim();
+            var buf = [];
+            i++;
+            while (i < lines.length && lines[i].trim().indexOf('```') !== 0) { buf.push(lines[i]); i++; }
+            i++;
+            out.push('<pre><code' + (lang ? ' class="language-' + dailyEscapeHtml(lang) + '"' : '') + '>' +
+                dailyEscapeHtml(buf.join('\n')) + '</code></pre>');
+            continue;
+        }
+
+        if (!stripped) { i++; continue; }
+
+        var m = stripped.match(/^(#{1,6})\s+(.*)$/);
+        if (m) {
+            var lv = m[1].length;
+            out.push('<h' + lv + '>' + dailyInlineMd(m[2]) + '</h' + lv + '>');
+            i++;
+            continue;
+        }
+
+        if (/^(-{3,}|\*{3,}|_{3,})$/.test(stripped)) { out.push('<hr>'); i++; continue; }
+
+        if (stripped.indexOf('>') === 0) {
+            var bq = [];
+            while (i < lines.length && lines[i].trim().indexOf('>') === 0) {
+                bq.push(dailyInlineMd(lines[i].trim().replace(/^>\s?/, '')));
+                i++;
+            }
+            out.push('<blockquote>' + bq.join('<br>') + '</blockquote>');
+            continue;
+        }
+
+        if (stripped.indexOf('|') >= 0 && i + 1 < lines.length && isTableSep(lines[i + 1])) {
+            var header = stripped.replace(/^\|/, '').replace(/\|$/, '').split('|').map(function (c) { return c.trim(); });
+            i += 2;
+            var rows = [];
+            while (i < lines.length && lines[i].trim() && lines[i].trim().indexOf('|') >= 0) {
+                rows.push(lines[i].trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(function (c) { return c.trim(); }));
+                i++;
+            }
+            var thead = header.map(function (c) { return '<th>' + dailyInlineMd(c) + '</th>'; }).join('');
+            var tbody = rows.map(function (r) {
+                return '<tr>' + r.map(function (c) { return '<td>' + dailyInlineMd(c) + '</td>'; }).join('') + '</tr>';
+            }).join('');
+            out.push('<table><thead><tr>' + thead + '</tr></thead><tbody>' + tbody + '</tbody></table>');
+            continue;
+        }
+
+        if (line.match(/^(\s*)([-*+]|\d+\.)\s+(.*)$/)) {
+            var ordered = /^\d+\./.test(line.match(/^(\s*)([-*+]|\d+\.)\s+/)[2]);
+            var tag = ordered ? 'ol' : 'ul';
+            var items = [];
+            while (i < lines.length) {
+                var mm = lines[i].match(/^(\s*)([-*+]|\d+\.)\s+(.*)$/);
+                if (!mm) break;
+                items.push('<li>' + dailyInlineMd(mm[3]) + '</li>');
+                i++;
+            }
+            out.push('<' + tag + '>' + items.join('') + '</' + tag + '>');
+            continue;
+        }
+
+        var para = [stripped];
+        i++;
+        while (i < lines.length && lines[i].trim() &&
+               !/^(#{1,6}\s|```|>|\s*([-*+]|\d+\.)\s|\|)/.test(lines[i].trim())) {
+            para.push(lines[i].trim());
+            i++;
+        }
+        out.push('<p>' + para.map(dailyInlineMd).join('<br>') + '</p>');
+    }
+    return out.join('\n');
+}
+
+// KaTeX 渲染；CDN 没加载成功就保持公式原文，不影响阅读
+function renderDailyMath(el) {
+    if (!el || typeof renderMathInElement !== 'function') return;
+    try {
+        renderMathInElement(el, {
+            delimiters: [
+                { left: '$$', right: '$$', display: true },
+                { left: '$', right: '$', display: false }
+            ],
+            throwOnError: false
+        });
+    } catch (e) { /* 忽略 */ }
+}
+
+function dailyTodayKey() {
+    var d = new Date();
+    var m = String(d.getMonth() + 1); if (m.length < 2) m = '0' + m;
+    var day = String(d.getDate()); if (day.length < 2) day = '0' + day;
+    return d.getFullYear() + '-' + m + '-' + day;
+}
+
+// 科目列表（按出现顺序去重），用于顶部切换按钮
+function dailySubjects() {
+    var seen = {}, list = [];
+    for (var i = 0; i < dailyQuestions.length; i++) {
+        var s = dailyQuestions[i].subject || '';
+        if (s && !seen[s]) { seen[s] = true; list.push(s); }
+    }
+    return list;
+}
+
+// 当前生效的科目：没选过就默认第一个科目
+function dailyCurrentSubject() {
+    var subjects = dailySubjects();
+    if (!subjects.length) return '';
+    if (!dailySubjectFilter || subjects.indexOf(dailySubjectFilter) < 0) return subjects[0];
+    return dailySubjectFilter;
+}
+
+function dailyFilteredIndexes() {
+    var cur = dailyCurrentSubject();
+    var list = [];
+    for (var i = 0; i < dailyQuestions.length; i++) {
+        if (dailyQuestions[i].subject === cur) list.push(i);
+    }
+    return list;
+}
+
+function renderDailySubjectTabs() {
+    var box = document.getElementById('dailySubjectTabs');
+    if (!box) return;
+    var subjects = dailySubjects();
+    var cur = dailyCurrentSubject();
+    var html = '';
+    for (var i = 0; i < subjects.length; i++) {
+        html += '<button class="daily-subj-tab' + (cur === subjects[i] ? ' active' : '') +
+            '" onclick="switchDailySubject(' + i + ')">' + dailyEscapeHtml(subjects[i]) + '</button>';
+    }
+    box.innerHTML = html;
+}
+
+window.switchDailySubject = function (i) {
+    var subjects = dailySubjects();
+    if (!subjects[i]) return;
+    dailySubjectFilter = subjects[i];
+    dailyCurrentIndex = -2;
+    renderDaily();
+};
+
+function saveDailyQuestions() {
+    localStorage.setItem('dailyQuestions', JSON.stringify(dailyQuestions));
+}
+
+function dailyMetaHtml(q) {
+    var html = '<div class="daily-meta">';
+    html += '<span>日期：<b>' + dailyEscapeHtml(q.date) + '</b></span>';
+    html += '<span>科目：<b>' + dailyEscapeHtml(q.subject) + '</b></span>';
+    if (q.topic) html += '<span>主题：<b>' + dailyEscapeHtml(q.topic) + '</b></span>';
+    if (q.difficulty) html += '<span>难度：<b>' + dailyEscapeHtml(q.difficulty) + '</b></span>';
+    if (q.minutes) html += '<span>预计：<b>' + dailyEscapeHtml(String(q.minutes)) + ' 分钟</b></span>';
+    html += '</div>';
+    return html;
+}
+
+function renderDaily() {
+    var card = document.getElementById('dailyTodayCard');
+    if (!card) return;
+    renderDailySubjectTabs();
+
+    // 首次进入：在当前科目范围内，默认看今天的题；今天没有就看最近一道
+    if (dailyCurrentIndex === -2) {
+        var pool = dailyFilteredIndexes();
+        dailyCurrentIndex = -1;
+        var todayKey = dailyTodayKey();
+        for (var pi = 0; pi < pool.length; pi++) {
+            if (dailyQuestions[pool[pi]].date === todayKey) { dailyCurrentIndex = pool[pi]; break; }
+        }
+        if (dailyCurrentIndex < 0 && pool.length > 0) dailyCurrentIndex = pool[0];
+    }
+
+    if (dailyCurrentIndex < 0 || !dailyQuestions[dailyCurrentIndex]) {
+        card.innerHTML =
+            '<div class="daily-empty">' +
+            '<p>今天还没有题目。</p>' +
+            '</div>';
+    } else {
+        var q = dailyQuestions[dailyCurrentIndex];
+        var isToday = q.date === dailyTodayKey();
+        var html = '<div class="daily-card' + (isToday ? ' daily-card-today' : '') + '">';
+        html += '<div class="daily-card-head">';
+        html += '<div class="daily-card-title">📖 ' + dailyEscapeHtml(q.date) + ' · ' + dailyEscapeHtml(q.subject) + '</div>';
+        html += '<div class="daily-card-actions">';
+        html += '<button onclick="deleteDailyCurrent()" title="删除这道题">🗑</button>';
+        html += '</div></div>';
+        html += dailyMetaHtml(q);
+        if (q.title) html += '<div class="daily-qtitle">' + dailyEscapeHtml(q.title) + '</div>';
+        html += '<div class="daily-section-title">题目</div>';
+        html += '<div class="daily-markdown" id="dailyQuestionMd">' + dailyMd(q.question) + '</div>';
+        html += '<div class="daily-answer-box">';
+        html += '<div class="daily-answer-head">';
+        html += '<div class="daily-section-title">答案与解析</div>';
+        html += '<button class="daily-answer-btn" id="dailyAnswerBtn" onclick="toggleDailyAnswer()">显示答案</button>';
+        html += '</div>';
+        html += '<div class="daily-markdown daily-answer-body" id="dailyAnswerMd" style="display:none">' +
+            dailyMd(q.answer || '（这道题还没有答案）') + '</div>';
+        html += '</div></div>';
+        card.innerHTML = html;
+        renderDailyMath(document.getElementById('dailyQuestionMd'));
+        renderDailyMath(document.getElementById('dailyAnswerMd'));
+    }
+
+    // 历史题目（折叠列表，点一条就把它显示在上方卡片里；跟随科目筛选）
+    var listBox = document.getElementById('dailyHistoryList');
+    var summary = document.getElementById('dailyHistorySummary');
+    var rest = [];
+    var filtered = dailyFilteredIndexes();
+    for (var fi = 0; fi < filtered.length; fi++) {
+        if (filtered[fi] !== dailyCurrentIndex) rest.push(filtered[fi]);
+    }
+    rest.sort(function (a, b) {
+        var qa = dailyQuestions[a], qb = dailyQuestions[b];
+        if (qa.date !== qb.date) return qa.date < qb.date ? 1 : -1;
+        return (qa.subject || '') < (qb.subject || '') ? 1 : -1;
+    });
+    if (summary) summary.textContent = '历史题目（' + rest.length + '）';
+    if (!listBox) return;
+    if (rest.length === 0) {
+        listBox.innerHTML = '<div class="daily-history-empty">暂无其他题目</div>';
+        return;
+    }
+    var h = '';
+    for (var k = 0; k < rest.length; k++) {
+        var idx = rest[k];
+        var r = dailyQuestions[idx];
+        h += '<div class="daily-history-item" onclick="viewDaily(' + idx + ')">';
+        h += '<span class="dh-date">' + dailyEscapeHtml(r.date) + '</span>';
+        h += '<span class="dh-subject">' + dailyEscapeHtml(r.subject) + '</span>';
+        h += '<span class="dh-title">' + dailyEscapeHtml(r.title || r.topic || '（无标题）') + '</span>';
+        h += '</div>';
+    }
+    listBox.innerHTML = h;
+}
+
+window.viewDaily = function (idx) {
+    if (!dailyQuestions[idx]) return;
+    dailyCurrentIndex = idx;
+    renderDaily();
+    var card = document.getElementById('dailyTodayCard');
+    if (card && card.scrollIntoView) {
+        try { card.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) { card.scrollIntoView(); }
+    }
+};
+
+window.toggleDailyAnswer = function () {
+    var body = document.getElementById('dailyAnswerMd');
+    var btn = document.getElementById('dailyAnswerBtn');
+    if (!body) return;
+    var show = body.style.display === 'none';
+    body.style.display = show ? '' : 'none';
+    if (btn) btn.textContent = show ? '隐藏答案' : '显示答案';
+    if (show) renderDailyMath(body);
+};
+
+window.deleteDailyCurrent = function () {
+    if (dailyCurrentIndex < 0 || !dailyQuestions[dailyCurrentIndex]) return;
+    var q = dailyQuestions[dailyCurrentIndex];
+    if (!window.confirm('删除 ' + q.date + ' 的「' + (q.subject || '') + '」这道题？（云同步后其他设备也会删除）')) return;
+    dailyQuestions.splice(dailyCurrentIndex, 1);
+    saveDailyQuestions();
+    dailyCurrentIndex = -2;
+    renderDaily();
+};
+
+/* ================= 导入题目 =================
+ * 数据源：daily.py 生成的 数据/daily-questions.json（出题后自动生成，也可 --export 手动刷新）。
+ * 只合并 dailyQuestions 这一个键，不会动任务/便签/课程表等其他数据。
+ *
+ * 本地预览（localhost）时，预览服务能直接读本机「每日一题」目录，
+ * 点一下「导入题目」就自动导入；读不到（比如还没出题）再回退到手动选文件。
+ * 线上（GitHub Pages）没有这个本地接口，只能手动选文件——浏览器不允许网页直接读本机文件。 */
+function extractDailyItems(obj) {
+    var items = null;
+    if (Array.isArray(obj)) items = obj;
+    else if (obj && Array.isArray(obj.items)) items = obj.items;
+    else if (obj && Array.isArray(obj.dailyQuestions)) items = obj.dailyQuestions;
+    else if (obj && obj.data && Array.isArray(obj.data.dailyQuestions)) items = obj.data.dailyQuestions;
+    if (!items) throw new Error('没找到题目数组（支持 items / dailyQuestions 字段）');
+    return items;
+}
+
+function applyDailyItems(items) {
+    var added = 0, updated = 0;
+    for (var i = 0; i < items.length; i++) {
+        var it = items[i];
+        if (!it || !it.date || !it.subject) continue;
+        var idx = -1;
+        for (var j = 0; j < dailyQuestions.length; j++) {
+            if (dailyQuestions[j].date === String(it.date) && dailyQuestions[j].subject === String(it.subject)) {
+                idx = j; break;
+            }
+        }
+        var norm = {
+            date: String(it.date),
+            subject: String(it.subject),
+            topic: it.topic || '',
+            title: it.title || '',
+            difficulty: it.difficulty || '',
+            minutes: it.minutes || it.estimated_minutes || 0,
+            question: it.question || '',
+            answer: it.answer || ''
+        };
+        if (idx >= 0) { dailyQuestions[idx] = norm; updated++; }
+        else { dailyQuestions.push(norm); added++; }
+    }
+    if (added + updated === 0) throw new Error('没有有效题目（每条需要 date 和 subject 字段）');
+
+    dailyQuestions.sort(function (a, b) {
+        if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+        return (a.subject || '') < (b.subject || '') ? 1 : -1;
+    });
+    saveDailyQuestions();
+    dailyCurrentIndex = -2;
+    renderDaily();
+    return { added: added, updated: updated };
+}
+
+function alertDailyResult(prefix, r) {
+    window.alert(prefix + '：新增 ' + r.added + ' 道，更新 ' + r.updated + ' 道。');
+}
+
+window.importDailyQuestions = function () {
+    var host = location.hostname;
+    if (host === 'localhost' || host === '127.0.0.1' || host === '') {
+        fetch('/api/daily-questions', { cache: 'no-cache' })
+            .then(function (resp) {
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                return resp.text();
+            })
+            .then(function (text) {
+                var r = applyDailyItems(extractDailyItems(JSON.parse(text)));
+                alertDailyResult('已自动导入本机题目', r);
+            })
+            .catch(function () {
+                // 本机还没这个文件（或预览服务没开）→ 回退手动选文件
+                document.getElementById('dailyImportFile').click();
+            });
+        return;
+    }
+    document.getElementById('dailyImportFile').click();
+};
+
+window.handleDailyImportFile = function (event) {
+    var file = event.target.files && event.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function () {
+        try {
+            var r = applyDailyItems(extractDailyItems(JSON.parse(reader.result)));
+            alertDailyResult('导入完成', r);
+        } catch (err) {
+            window.alert('导入失败：' + err.message);
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
 };

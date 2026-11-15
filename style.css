@@ -82,6 +82,12 @@ body {
     height: 100%;
 }
 
+#tab-daily {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
 .left-panel {
     flex: 1.6;
     display: flex;
@@ -1817,6 +1823,364 @@ header h1 {
 .lyrics-nav button:hover { background: #f0f9e8; }
 .lyrics-today-btn { color: #dd6b20 !important; border-color: #f6d8b8 !important; }
 
+/* ===== Daily Question Page Styles ===== */
+.daily-layout {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.daily-layout header {
+    background: #8B8682;
+    color: white;
+    padding: 12px 16px;
+    flex-shrink: 0;
+}
+
+.daily-layout header h1 {
+    font-size: 1.3rem;
+}
+
+.daily-toolbar {
+    padding: 10px 16px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    border-bottom: 1px solid #e0e0e0;
+    background: #fafafa;
+}
+
+/* 科目切换按钮 */
+.daily-subj-tabs {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.daily-subj-tab {
+    padding: 6px 14px;
+    border: 1px solid #d9c8b4;
+    background: white;
+    color: #7a6a58;
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: 0.82rem;
+    transition: all 0.15s;
+}
+
+.daily-subj-tab:hover {
+    border-color: #8B8682;
+    color: #5a544f;
+}
+
+.daily-subj-tab.active {
+    background: #8B8682;
+    border-color: #8B8682;
+    color: white;
+}
+
+.daily-import-btn {
+    padding: 7px 16px;
+    background: #8B8682;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: background 0.2s;
+}
+
+.daily-import-btn:hover {
+    background: #6d6966;
+}
+
+.daily-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    min-height: 0;
+}
+
+.daily-empty {
+    text-align: center;
+    color: #999;
+    padding: 60px 20px;
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.daily-empty p {
+    margin: 8px 0;
+    font-size: 1rem;
+}
+
+.daily-card {
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    padding: 18px 22px;
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+.daily-card-today {
+    border: 1px solid #d9c8b4;
+}
+
+.daily-card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.daily-card-title {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #5a544f;
+}
+
+.daily-card-actions button {
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 0.95rem;
+    padding: 4px 6px;
+    border-radius: 6px;
+    opacity: 0.6;
+}
+
+.daily-card-actions button:hover {
+    background: #f2e9e0;
+    opacity: 1;
+}
+
+.daily-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    font-size: 0.8rem;
+    color: #999;
+    margin-bottom: 12px;
+}
+
+.daily-meta b {
+    color: #5a544f;
+    font-weight: 600;
+}
+
+.daily-qtitle {
+    font-size: 1rem;
+    color: #333;
+    margin-bottom: 6px;
+    font-weight: 600;
+}
+
+.daily-section-title {
+    font-size: 0.95rem;
+    margin: 18px 0 10px;
+    padding-left: 10px;
+    border-left: 4px solid #8B8682;
+    color: #5a544f;
+    font-weight: 700;
+}
+
+.daily-markdown {
+    line-height: 1.75;
+    font-size: 0.95rem;
+    color: #333;
+    word-break: break-word;
+}
+
+.daily-markdown h1, .daily-markdown h2, .daily-markdown h3, .daily-markdown h4 {
+    line-height: 1.4;
+    margin: 16px 0 8px;
+}
+
+.daily-markdown table {
+    border-collapse: collapse;
+    margin: 12px 0;
+    font-size: 0.88rem;
+    display: block;
+    overflow-x: auto;
+}
+
+.daily-markdown th, .daily-markdown td {
+    border: 1px solid #ddd;
+    padding: 6px 12px;
+    text-align: left;
+}
+
+.daily-markdown th {
+    background: #f7f3ee;
+}
+
+.daily-markdown pre {
+    background: #2d2d2d;
+    color: #f0f0f0;
+    padding: 12px 14px;
+    border-radius: 8px;
+    overflow-x: auto;
+    font-size: 0.82rem;
+    line-height: 1.5;
+}
+
+.daily-markdown code {
+    font-family: Consolas, "Courier New", monospace;
+}
+
+.daily-markdown p code, .daily-markdown li code, .daily-markdown td code {
+    background: #f0ebe4;
+    color: #b5433b;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+}
+
+.daily-markdown blockquote {
+    margin: 10px 0;
+    padding: 8px 14px;
+    border-left: 4px solid #d9c8b4;
+    background: #faf7f2;
+    color: #666;
+}
+
+.daily-markdown hr {
+    border: none;
+    border-top: 1px solid #e0e0e0;
+    margin: 20px 0;
+}
+
+.daily-markdown .katex {
+    font-size: 1.05em;
+}
+
+.daily-answer-box {
+    margin-top: 26px;
+    border-top: 2px dashed #e0e0e0;
+    padding-top: 4px;
+}
+
+.daily-answer-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.daily-answer-btn {
+    padding: 6px 14px;
+    background: #8B8682;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.82rem;
+}
+
+.daily-answer-btn:hover {
+    background: #6d6966;
+}
+
+.daily-answer-body {
+    background: #fffdf5;
+    border: 1px solid #f0e0b8;
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin-top: 14px;
+}
+
+/* 历史题目折叠列表 */
+.daily-history {
+    max-width: 900px;
+    margin: 18px auto 40px;
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    overflow: hidden;
+}
+
+.daily-history summary {
+    padding: 12px 18px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #5a544f;
+    user-select: none;
+    list-style: none;
+}
+
+.daily-history summary::before {
+    content: '\25B8 ';
+    color: #8B8682;
+}
+
+.daily-history[open] summary::before {
+    content: '\25BE ';
+}
+
+.daily-history summary:hover {
+    background: #faf7f2;
+}
+
+.daily-history-list {
+    border-top: 1px solid #eee;
+    max-height: 50vh;
+    overflow-y: auto;
+}
+
+.daily-history-empty {
+    padding: 16px;
+    text-align: center;
+    color: #aaa;
+    font-size: 0.85rem;
+}
+
+.daily-history-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 18px;
+    border-bottom: 1px solid #f3f3f3;
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+
+.daily-history-item:last-child {
+    border-bottom: none;
+}
+
+.daily-history-item:hover {
+    background: #faf7f2;
+}
+
+.dh-date {
+    color: #999;
+    font-size: 0.78rem;
+    flex-shrink: 0;
+}
+
+.dh-subject {
+    background: #f0ebe4;
+    color: #7a6a58;
+    border-radius: 5px;
+    padding: 1px 8px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.dh-title {
+    color: #444;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 @media (max-width: 820px) {
     body {
         height: auto;
@@ -1884,4 +2248,9 @@ header h1 {
     }
     .lyrics-section { padding: 10px 12px 12px; }
     .lyrics-ko { font-size: 1rem; }
+
+    #tab-daily, .daily-layout { height: auto; }
+    .daily-scroll { overflow: visible; padding: 12px; }
+    .daily-card { padding: 14px; }
+    .daily-toolbar { padding: 8px 12px; }
 }
