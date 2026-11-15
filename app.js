@@ -2640,8 +2640,10 @@ function dailyIdbClear() {
 }
 
 // 从目录句柄读取 数据/daily-questions.json 的文本（调用前需已确保读权限）
+// 注意：getFileHandle 的 name 只能是单个文件名，必须先进入「数据」子目录
 function dailyReadFromDir(dirHandle) {
-    return dirHandle.getFileHandle('数据/daily-questions.json')
+    return dirHandle.getDirectoryHandle('数据')
+        .then(function (dataDir) { return dataDir.getFileHandle('daily-questions.json'); })
         .then(function (fh) { return fh.getFile(); })
         .then(function (file) { return file.text(); })
         .catch(function (e) {
