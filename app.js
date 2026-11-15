@@ -2587,24 +2587,117 @@ function alertDailyResult(prefix, r) {
     window.alert(prefix + '：新增 ' + r.added + ' 道，更新 ' + r.updated + ' 道。');
 }
 
-window.importDailyQuestions = function () {
+/* -------- 记住「每日一题」目录（File System Access API） --------
+ * 线上页面无法直接读本机文件，但授权一次目录后浏览器会记住句柄（存 IndexedDB），
+ * 之后点「导入题目」直接读该目录下的 数据/daily-questions.json，不用再选。
+ * 仅电脑 Chrome / Edge 支持；其他浏览器或手机回退到手动选文件。 */
+var dailyDirHandle = null;   // 内存缓存句柄，避免每次开 IndexedDB
+
+function dailyIdbOpen() {
+    return new Promise(function (resolve, reject) {
+        var req = indexedDB.open('my-world-daily', 1);
+        req.onupgradeneeded = function () {
+            if (req.result && !req.result.objectStoreNames.contains('handles')) {
+                req.result.createObjectStore('handles');
+            }
+        };
+        req.onsuccess = function () { resolve(req.result); };
+        req.onerror = function () { reject(req.error); };
+    });
+}
+
+function dailyIdbGet() {
+    return dailyIdbOpen().then(function (db) {
+        return new Promise(function (resolve, reject) {
+            var tx = db.transaction('handles', 'readonly');
+            var req = tx.objectStore('handles').get('dir');
+            req.onsuccess = function () { resolve(req.result || null); };
+            req.onerror = function () { reject(req.error); };
+        });
+    });
+}
+
+function dailyIdbSet(handle) {
+    return dailyIdbOpen().then(function (db) {
+        return new Promise(function (resolve, reject) {
+            var tx = db.transaction('handles', 'readwrite');
+            tx.objectStore('handles').put(handle, 'dir');
+            tx.oncomplete = function () { resolve(); };
+            tx.onerror = function () { reject(tx.error); };
+        });
+    });
+}
+
+function dailyIdbClear() {
+    return dailyIdbOpen().then(function (db) {
+        return new Promise(function (resolve, reject) {
+            var tx = db.transaction('handles', 'readwrite');
+            tx.objectStore('handles').delete('dir');
+            tx.oncomplete = function () { resolve(); };
+            tx.onerror = function () { reject(tx.error); };
+        });
+    });
+}
+
+// 从目录句柄读取 数据/daily-questions.json 的文本
+function dailyReadFromDir(dirHandle) {
+    return dirHandle.getFileHandle('数据/daily-questions.json').then(function (fh) {
+        // 页面刷新后可能要重新授权；在点击链里调用一般直接通过
+        if (dirHandle.requestPermission) {
+            return dirHandle.requestPermission({ mode: 'read' }).then(function (perm) {
+                if (perm && perm !== 'granted') throw new Error('没有读取权限');
+                return fh.getFile();
+            });
+        }
+        return fh.getFile();
+    }).then(function (file) {
+        return file.text();
+    }).catch(function () {
+        throw new Error('所选目录下没有「数据/daily-questions.json」，请选择「每日一题」目录');
+    });
+}
+
+window.importDailyQuestions = async function () {
+    // 1) 本地预览：预览服务能直接读本机文件，最省事
     var host = location.hostname;
     if (host === 'localhost' || host === '127.0.0.1' || host === '') {
-        fetch('/api/daily-questions', { cache: 'no-cache' })
-            .then(function (resp) {
-                if (!resp.ok) throw new Error('HTTP ' + resp.status);
-                return resp.text();
-            })
-            .then(function (text) {
-                var r = applyDailyItems(extractDailyItems(JSON.parse(text)));
-                alertDailyResult('已自动导入本机题目', r);
-            })
-            .catch(function () {
-                // 本机还没这个文件（或预览服务没开）→ 回退手动选文件
-                document.getElementById('dailyImportFile').click();
-            });
-        return;
+        try {
+            var resp = await fetch('/api/daily-questions', { cache: 'no-cache' });
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            var text = await resp.text();
+            alertDailyResult('已自动导入本机题目', applyDailyItems(extractDailyItems(JSON.parse(text))));
+            return;
+        } catch (e) { /* 没开预览服务就继续走下面的方式 */ }
     }
+
+    // 2) 记住目录（电脑 Chrome / Edge）
+    if (window.showDirectoryPicker && window.indexedDB) {
+        try {
+            var handle = dailyDirHandle || (await dailyIdbGet());
+            if (handle) {
+                try {
+                    var t2 = await dailyReadFromDir(handle);
+                    alertDailyResult('已自动导入本机题目', applyDailyItems(extractDailyItems(JSON.parse(t2))));
+                    return;
+                } catch (e) {
+                    // 目录失效 / 没选对：清掉后重新选
+                    dailyDirHandle = null;
+                    try { await dailyIdbClear(); } catch (e2) {}
+                }
+            }
+            var picked = await window.showDirectoryPicker({ mode: 'read' });
+            dailyDirHandle = picked;
+            try { await dailyIdbSet(picked); } catch (e3) {}
+            var t3 = await dailyReadFromDir(picked);
+            alertDailyResult('已自动导入本机题目', applyDailyItems(extractDailyItems(JSON.parse(t3))));
+            return;
+        } catch (e4) {
+            // 用户主动取消：直接结束，不再弹文件框
+            if (e4 && e4.name === 'AbortError') return;
+        }
+    }
+
+    // 3) 回退：手动选文件
     document.getElementById('dailyImportFile').click();
 };
 
