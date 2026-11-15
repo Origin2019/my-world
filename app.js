@@ -2639,21 +2639,23 @@ function dailyIdbClear() {
     });
 }
 
-// 从目录句柄读取 数据/daily-questions.json 的文本
+// 从目录句柄读取 数据/daily-questions.json 的文本（调用前需已确保读权限）
 function dailyReadFromDir(dirHandle) {
-    return dirHandle.getFileHandle('数据/daily-questions.json').then(function (fh) {
-        // 页面刷新后可能要重新授权；在点击链里调用一般直接通过
-        if (dirHandle.requestPermission) {
-            return dirHandle.requestPermission({ mode: 'read' }).then(function (perm) {
-                if (perm && perm !== 'granted') throw new Error('没有读取权限');
-                return fh.getFile();
-            });
-        }
-        return fh.getFile();
-    }).then(function (file) {
-        return file.text();
-    }).catch(function () {
-        throw new Error('所选目录下没有「数据/daily-questions.json」，请选择「每日一题」目录');
+    return dirHandle.getFileHandle('数据/daily-questions.json')
+        .then(function (fh) { return fh.getFile(); })
+        .then(function (file) { return file.text(); })
+        .catch(function (e) {
+            throw new Error('读取失败（' + (e && e.message ? e.message : e) + '）');
+        });
+}
+
+// 确保对目录有读权限；返回是否可用
+function dailyEnsureDirPermission(dirHandle) {
+    if (!dirHandle.requestPermission) return Promise.resolve(true);
+    return dirHandle.requestPermission({ mode: 'read' }).then(function (perm) {
+        // 'prompt' 不一定代表失败：可能是缺少用户手势导致没弹确认，先继续尝试读取
+        if (perm === 'denied') throw new Error('权限被拒绝（可在地址栏站点权限里重新允许）');
+        return true;
     });
 }
 
@@ -2676,13 +2678,17 @@ window.importDailyQuestions = async function () {
             var handle = dailyDirHandle || (await dailyIdbGet());
             if (handle) {
                 try {
+                    // 先要权限，再读文件（顺序很重要，否则容易每次都被判失败）
+                    await dailyEnsureDirPermission(handle);
                     var t2 = await dailyReadFromDir(handle);
                     alertDailyResult('已自动导入本机题目', applyDailyItems(extractDailyItems(JSON.parse(t2))));
                     return;
                 } catch (e) {
-                    // 目录失效 / 没选对：清掉后重新选
+                    // 句柄失效 / 目录不对：清掉后重新选，并把原因告诉用户便于排查
                     dailyDirHandle = null;
                     try { await dailyIdbClear(); } catch (e2) {}
+                    window.alert('读取上次记住的目录失败：' + (e && e.message ? e.message : e) +
+                                 '\n请重新选择「每日一题」目录。');
                 }
             }
             var picked = await window.showDirectoryPicker({ mode: 'read' });
